@@ -90,11 +90,15 @@ class RTCVideoRenderer extends ValueNotifier<RTCVideoValue>
         onResize?.call();
         break;
       case 'didFirstFrameRendered':
+        _onDidFirstRendered?.call();
         value = value.copyWith(renderVideo: renderVideo);
         onFirstFrameRendered?.call();
         break;
     }
   }
+
+  Function? _onDidFirstRendered;
+  set onDidFirstRendered(Function? f) => _onDidFirstRendered = f;
 
   void errorListener(Object obj) {
     if (obj is Exception) {
