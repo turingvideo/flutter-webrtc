@@ -1,6 +1,30 @@
 # Changelog
 
 --------------------------------------------
+[0.8.5] - 2022-04-01
+
+* [Dart] Expose RTCDataChannel.id (#898) 
+* [Android] Enable H264 high profile for SimulcastVideoEncoderFactoryWrapper (#890)
+
+[0.8.4] - 2022-03-28
+
+* [Android] Fix simulcast factory not sending back EncoderInfo (#891)
+* [Android] fix: correct misspell in method screenRequestPermissions (#876)
+
+
+[0.8.3] - 2022-03-01
+
+* [Android/iOS] Update android/ios webrtc native sdk versions.
+* [Windows] Feature of selecting i/o audio devices by passing sourceId and/or deviceId constraints (#851).
+
+[0.8.2] - 2022-02-08
+
+* [Android/iOS/macOS/Web] Add restartIce.
+
+[0.8.1] - 2021-12-29
+
+* [Android/iOS] Bump webrtc-sdk version to 93.4577.01.
+
 [0.8.0] - 2021-12-05
 
 * [Dart] Refactor: Use webrtc interface. (#777)

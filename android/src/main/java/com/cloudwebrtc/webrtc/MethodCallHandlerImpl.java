@@ -156,7 +156,7 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
 
     mFactory = PeerConnectionFactory.builder()
             .setOptions(new Options())
-            .setVideoEncoderFactory(new SimulcastVideoEncoderFactoryWrapper(eglContext, true, false))
+            .setVideoEncoderFactory(new SimulcastVideoEncoderFactoryWrapper(eglContext, true, true))
             .setVideoDecoderFactory(new DefaultVideoDecoderFactory(eglContext))
             .setAudioDeviceModule(audioDeviceModule)
             .createPeerConnectionFactory();
@@ -372,6 +372,12 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
       case "trackDispose": {
         String trackId = call.argument("trackId");
         localTracks.remove(trackId);
+        result.success(null);
+        break;
+      }
+      case "restartIce": {
+        String peerConnectionId = call.argument("peerConnectionId");
+        restartIce(peerConnectionId);
         result.success(null);
         break;
       }
@@ -1455,6 +1461,15 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
       resultError("peerConnectionGetStats", "peerConnection is null", result);
     } else {
       pco.getStats(trackId, result);
+    }
+  }
+
+  public void restartIce(final String id) {
+    PeerConnectionObserver pco = mPeerConnectionObservers.get(id);
+    if (pco == null || pco.getPeerConnection() == null) {
+      Log.d(TAG, "restartIce() peerConnection is null");
+    } else {
+      pco.restartIce();
     }
   }
 

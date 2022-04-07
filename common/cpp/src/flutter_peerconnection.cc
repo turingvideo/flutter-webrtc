@@ -556,7 +556,9 @@ void FlutterPeerConnection::RtpSenderReplaceTrack(
     result_ptr->Error("rtpSenderDispose", "sender is null");
     return;
   }
-  // TODO RtpSenderReplaceTrack
+
+  sender->set_track(track);
+
   result_ptr->Success();
 }
 
@@ -1143,6 +1145,26 @@ scoped_refptr<RTCMediaStream> FlutterPeerConnectionObserver::MediaStreamForId(
   if (it != remote_streams_.end())
     return (*it).second;
   return nullptr;
+}
+
+scoped_refptr<RTCMediaTrack> FlutterPeerConnectionObserver::MediaTrackForId(const std::string& id) {
+    for (auto it = remote_streams_.begin(); it != remote_streams_.end(); it++)
+    {
+        auto remoteStream = (*it).second;
+        auto audio_tracks = remoteStream->audio_tracks();
+        for (auto track : audio_tracks.std_vector()) {
+            if (track->id().std_string() == id) {
+                return track;
+            }
+        }
+        auto video_tracks = remoteStream->video_tracks();
+        for (auto track : video_tracks.std_vector()) {
+            if (track->id().std_string() == id) {
+                return track;
+            }
+        }
+    }
+    return nullptr;
 }
 
 void FlutterPeerConnectionObserver::RemoveStreamForId(const std::string& id) {
