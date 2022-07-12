@@ -4,6 +4,7 @@
 #import "FlutterRTCDataChannel.h"
 #import "FlutterRTCVideoRenderer.h"
 #import "AudioUtils.h"
+#import "FlutterRTCCameraVideoCapturer.h"
 
 #import <AVFoundation/AVFoundation.h>
 #import <WebRTC/WebRTC.h>
@@ -486,6 +487,11 @@
         render.videoTrack = nil;
         [render dispose];
         [self.renders removeObjectForKey:textureId];
+        result(nil);
+    } else if ([@"setLandscapeMode" isEqualToString:call.method]) {
+        NSDictionary* argsMap = call.arguments;
+        BOOL landscapeMode = [argsMap[@"landscapeMode"] boolValue];
+        [self.videoCapturer setLandscapeMode:landscapeMode];
         result(nil);
     } else if ([@"videoRendererSetSrcObject" isEqualToString:call.method]){
         NSDictionary* argsMap = call.arguments;

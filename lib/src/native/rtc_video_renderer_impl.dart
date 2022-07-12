@@ -82,10 +82,14 @@ class RTCVideoRenderer extends ValueNotifier<RTCVideoValue>
         onResize?.call();
         break;
       case 'didFirstFrameRendered':
+        _onDidFirstRendered?.call();
         value = value.copyWith(renderVideo: renderVideo);
         break;
     }
   }
+
+  Function? _onDidFirstRendered;
+  set onDidFirstRendered(Function? f) => _onDidFirstRendered = f;
 
   void errorListener(Object obj) {
     if (obj is Exception) {
@@ -119,5 +123,13 @@ class RTCVideoRenderer extends ValueNotifier<RTCVideoValue>
   Future<bool> audioOutput(String deviceId) {
     // TODO(cloudwebrtc): related to https://github.com/flutter-webrtc/flutter-webrtc/issues/395
     throw UnimplementedError('This is not implement yet');
+  }
+
+  void setLandscapeMode(bool landscape) {
+    if (_textureId == null) throw 'Call initialize before setting the stream';
+    Helper.setLandscapeMode(
+      textureId: _textureId,
+      isLandscapeSupported: landscape,
+    );
   }
 }
