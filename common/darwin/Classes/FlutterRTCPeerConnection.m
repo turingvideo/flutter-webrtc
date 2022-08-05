@@ -149,15 +149,21 @@
                             peerConnection:(RTCPeerConnection *)peerConnection
                                     result:(FlutterResult)result
 {
-    [peerConnection setRemoteDescription: sdp completionHandler: ^(NSError *error) {
-        if (error) {
-            result([FlutterError errorWithCode:@"SetRemoteDescriptionFailed"
-                                       message:[NSString stringWithFormat:@"Error %@", error.localizedDescription]
-                                       details:nil]);
-        } else {
-            result(nil);
-        }
-    }];
+
+    dispatch_async(dispatch_get_global_queue(0, 0), ^{
+        [peerConnection setRemoteDescription: sdp completionHandler: ^(NSError *error) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (error) {
+                    result([FlutterError errorWithCode:@"SetRemoteDescriptionFailed"
+                                               message:[NSString stringWithFormat:@"Error %@", error.localizedDescription]
+                                               details:nil]);
+                    } else {
+                        result(nil);
+                    }
+            });
+
+        }];
+    });
 }
 
 -(void) peerConnectionAddICECandidate:(RTCIceCandidate*)candidate
