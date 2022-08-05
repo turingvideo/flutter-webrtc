@@ -183,7 +183,9 @@
 
 -(void) peerConnectionClose:(RTCPeerConnection *)peerConnection
 {
-    [peerConnection close];
+    dispatch_async(dispatch_get_global_queue(0, 0), ^{
+        [peerConnection close];
+    });
 
     // Clean up peerConnection's streams and tracks
     [peerConnection.remoteStreams removeAllObjects];
