@@ -460,21 +460,8 @@
 
         RTCPeerConnection *peerConnection = self.peerConnections[peerConnectionId];
         if (peerConnection) {
-            [peerConnection close];
+            [self peerConnectionClose: peerConnection];
             [self.peerConnections removeObjectForKey:peerConnectionId];
-
-            // Clean up peerConnection's streams and tracks
-            [peerConnection.remoteStreams removeAllObjects];
-            [peerConnection.remoteTracks removeAllObjects];
-
-            // Clean up peerConnection's dataChannels.
-            NSMutableDictionary<NSString *, RTCDataChannel *> *dataChannels = peerConnection.dataChannels;
-            for (NSString *dataChannelId in dataChannels) {
-                dataChannels[dataChannelId].delegate = nil;
-                // There is no need to close the RTCDataChannel because it is owned by the
-                // RTCPeerConnection and the latter will close the former.
-            }
-            [dataChannels removeAllObjects];
         }
         result(nil);
     } else if ([@"createVideoRenderer" isEqualToString:call.method]){
