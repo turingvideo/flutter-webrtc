@@ -308,15 +308,13 @@ class RTCPeerConnectionNative extends RTCPeerConnection {
   }
 
   @override
-  Future<void> setRemoteDescription(RTCSessionDescription description) async {
-    try {
-      await WebRTC.invokeMethod('setRemoteDescription', <String, dynamic>{
-        'peerConnectionId': _peerConnectionId,
-        'description': description.toMap(),
-      });
-    } on PlatformException catch (e) {
+  Future<void> setRemoteDescription(RTCSessionDescription description) {
+    return WebRTC.invokeMethod('setRemoteDescription', <String, dynamic>{
+      'peerConnectionId': _peerConnectionId,
+      'description': description.toMap(),
+    }).catchError((e) {
       throw 'Unable to RTCPeerConnection::setRemoteDescription: ${e.message}';
-    }
+    });
   }
 
   @override
@@ -433,14 +431,12 @@ class RTCPeerConnectionNative extends RTCPeerConnection {
   }
 
   @override
-  Future<void> close() async {
-    try {
-      await WebRTC.invokeMethod('peerConnectionClose', <String, dynamic>{
-        'peerConnectionId': _peerConnectionId,
-      });
-    } on PlatformException catch (e) {
+  Future<void> close() {
+    return WebRTC.invokeMethod('peerConnectionClose', <String, dynamic>{
+      'peerConnectionId': _peerConnectionId,
+    }).catchError((e) {
       throw 'Unable to RTCPeerConnection::close: ${e.message}';
-    }
+    });
   }
 
   /// Unified-Plan.
