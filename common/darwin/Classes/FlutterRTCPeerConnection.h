@@ -40,4 +40,5 @@
 -(void) peerConnectionSetConfiguration:(nonnull RTCConfiguration*)configuration
                         peerConnection:(nonnull RTCPeerConnection*)peerConnection;
 
+-(void) peerConnectionClose:(RTCPeerConnection *)peerConnection;
 @end
