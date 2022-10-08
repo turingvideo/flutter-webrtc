@@ -311,12 +311,16 @@ class RTCPeerConnectionNative extends RTCPeerConnection {
   @override
   Future<void> setRemoteDescription(RTCSessionDescription description) async {
     try {
-      await WebRTC.invokeMethod('setRemoteDescription', <String, dynamic>{
+      final response = await WebRTC.invokeMethod('setRemoteDescription', <String, dynamic>{
         'peerConnectionId': _peerConnectionId,
         'description': description.toMap(),
       });
+      print('=========== setRemoteDescription response = $response');
+      print("=========== setRemoteDescription _peerConnection Id = $_peerConnectionId");
     } on PlatformException catch (e) {
       throw 'Unable to RTCPeerConnection::setRemoteDescription: ${e.message}';
+    } catch (e) {
+      throw 'Unable to RTCPeerConnection::setRemoteDescription: ${e.toString()}';
     }
   }
 
