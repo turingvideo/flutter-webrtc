@@ -19,7 +19,7 @@
     RTCVideoRotation _rotation;
     FlutterEventChannel* _eventChannel;
     bool _isFirstFrameRendered;
-    File *_file;
+    FILE *_file;
 }
 
 @synthesize textureId  = _textureId;
