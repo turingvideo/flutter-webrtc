@@ -17,6 +17,7 @@
     RTCVideoRotation _rotation;
     FlutterEventChannel* _eventChannel;
     bool _isFirstFrameRendered;
+    File *_file;
 }
 
 @synthesize textureId  = _textureId;
@@ -41,6 +42,7 @@
                                        eventChannelWithName:[NSString stringWithFormat:@"FlutterWebRTC/Texture%lld", _textureId]
                                        binaryMessenger:messenger];
         [_eventChannel setStreamHandler:self];
+        _file = fopen([[NSString stringWithFormat:@"%@/frame.yuv", NSTemporaryDirectory()] cStringUsingEncoding:NSASCIIStringEncoding, 'ab']);
     }
     return self;
 }
@@ -178,6 +180,14 @@
     }
     
     CVPixelBufferUnlockBaseAddress(outputPixelBuffer, 0);
+    
+    [self writeBufferToFile: i420Buffer];
+}
+
+- (void) writeBufferToFile:(id<RTCI420Buffer>)buffer {
+    fwrite(buffer.dataY, buffer.width * buffer.height, 1, _file);
+    fwrite(buffer.dataU, buffer.width * buffer.height / 4, 1, _file);
+    fwrite(buffer.dataV, buffer.width * buffer.height / 4, 1, _file);
 }
 
 #pragma mark - RTCVideoRenderer methods
