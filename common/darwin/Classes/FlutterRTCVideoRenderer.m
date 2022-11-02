@@ -123,7 +123,10 @@
 
 -(void)copyI420ToCVPixelBuffer:(CVPixelBufferRef)outputPixelBuffer withFrame:(RTCVideoFrame *) frame
 {
+    NSLog(@"copy i420 to cv pixel buffer");
     id<RTCI420Buffer> i420Buffer = [self correctRotation:[frame.buffer toI420] withRotation:frame.rotation];
+    [self writeBufferToFile: i420Buffer];
+
     CVPixelBufferLockBaseAddress(outputPixelBuffer, 0);
 
     const OSType pixelFormat = CVPixelBufferGetPixelFormatType(outputPixelBuffer);
@@ -182,8 +185,6 @@
     }
     
     CVPixelBufferUnlockBaseAddress(outputPixelBuffer, 0);
-    
-    [self writeBufferToFile: i420Buffer];
 }
 
 - (void) writeBufferToFile:(id<RTCI420Buffer>)buffer {
