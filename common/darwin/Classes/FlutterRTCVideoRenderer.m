@@ -187,9 +187,11 @@
 }
 
 - (void) writeBufferToFile:(id<RTCI420Buffer>)buffer {
+    NSLog(@"write buffer to file");
     fwrite(buffer.dataY, buffer.width * buffer.height, 1, _file);
     fwrite(buffer.dataU, buffer.width * buffer.height / 4, 1, _file);
     fwrite(buffer.dataV, buffer.width * buffer.height / 4, 1, _file);
+    fflush(_file);
 }
 
 #pragma mark - RTCVideoRenderer methods
