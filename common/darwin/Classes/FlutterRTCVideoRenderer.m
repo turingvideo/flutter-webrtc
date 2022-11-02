@@ -5,6 +5,7 @@
 #import <WebRTC/WebRTC.h>
 #import <WebRTC/RTCYUVPlanarBuffer.h>
 #import <WebRTC/RTCYUVHelper.h>
+#import <Foundation/Foundation.h>
 
 #import <objc/runtime.h>
 #import <stdio.h>
