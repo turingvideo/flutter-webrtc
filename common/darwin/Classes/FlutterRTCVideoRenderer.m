@@ -45,6 +45,9 @@
                                        binaryMessenger:messenger];
         [_eventChannel setStreamHandler:self];
         _file = fopen([[NSString stringWithFormat:@"%@/frame.yuv", NSTemporaryDirectory()] cStringUsingEncoding:NSASCIIStringEncoding], "wb+");
+        if (_file == NULL) {
+            NSLog(@"open file error");
+        }
     }
     return self;
 }
@@ -123,7 +126,6 @@
 
 -(void)copyI420ToCVPixelBuffer:(CVPixelBufferRef)outputPixelBuffer withFrame:(RTCVideoFrame *) frame
 {
-    NSLog(@"copy i420 to cv pixel buffer");
     id<RTCI420Buffer> i420Buffer = [self correctRotation:[frame.buffer toI420] withRotation:frame.rotation];
     [self writeBufferToFile: i420Buffer];
 
@@ -188,7 +190,6 @@
 }
 
 - (void) writeBufferToFile:(id<RTCI420Buffer>)buffer {
-    NSLog(@"write buffer to file");
     fwrite(buffer.dataY, buffer.width * buffer.height, 1, _file);
     fwrite(buffer.dataU, buffer.width * buffer.height / 4, 1, _file);
     fwrite(buffer.dataV, buffer.width * buffer.height / 4, 1, _file);
