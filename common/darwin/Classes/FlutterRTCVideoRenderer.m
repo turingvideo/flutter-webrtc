@@ -42,7 +42,7 @@
                                        eventChannelWithName:[NSString stringWithFormat:@"FlutterWebRTC/Texture%lld", _textureId]
                                        binaryMessenger:messenger];
         [_eventChannel setStreamHandler:self];
-        _file = fopen([[NSString stringWithFormat:@"%@/frame.yuv", NSTemporaryDirectory()] cStringUsingEncoding:NSASCIIStringEncoding, 'ab']);
+        _file = fopen([[NSString stringWithFormat:@"%@/frame.yuv", NSTemporaryDirectory()] cStringUsingEncoding:NSASCIIStringEncoding, 'wb']);
     }
     return self;
 }
