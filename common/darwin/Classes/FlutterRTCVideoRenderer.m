@@ -7,6 +7,7 @@
 #import <WebRTC/RTCYUVHelper.h>
 
 #import <objc/runtime.h>
+#import <stdio.h>
 
 #import "FlutterWebRTCPlugin.h"
 
