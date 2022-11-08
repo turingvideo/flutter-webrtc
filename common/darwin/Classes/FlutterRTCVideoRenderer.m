@@ -127,7 +127,7 @@
 -(void)copyI420ToCVPixelBuffer:(CVPixelBufferRef)outputPixelBuffer withFrame:(RTCVideoFrame *) frame
 {
     id<RTCI420Buffer> i420Buffer = [self correctRotation:[frame.buffer toI420] withRotation:frame.rotation];
-    [self writeBufferToFile: i420Buffer];
+    // [self writeBufferToFile: i420Buffer];
 
     CVPixelBufferLockBaseAddress(outputPixelBuffer, 0);
 
