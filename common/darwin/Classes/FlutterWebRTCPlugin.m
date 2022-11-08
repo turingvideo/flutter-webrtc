@@ -73,7 +73,7 @@
         self.viewController = viewController;
 #endif
     }
-    //RTCSetMinDebugLogLevel(RTCLoggingSeverityVerbose);
+    RTCSetMinDebugLogLevel(RTCLoggingSeverityVerbose);
     RTCDefaultVideoDecoderFactory *decoderFactory = [[RTCDefaultVideoDecoderFactory alloc] init];
     RTCDefaultVideoEncoderFactory *encoderFactory = [[RTCDefaultVideoEncoderFactory alloc] init];
 
