@@ -10,6 +10,7 @@
 @class FlutterRTCVideoRenderer;
 @class FlutterRTCFrameCapturer;
 @class FlutterRTCCameraVideoCapturer;
+@class FlutterRTCMediaRecorder;
 
 typedef void (^CompletionHandler)(void);
 
@@ -26,6 +27,7 @@ typedef void (^CapturerStopHandler)(CompletionHandler handler);
 @property (nonatomic, strong) NSMutableDictionary<NSString *, RTCMediaStream *> *localStreams;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, RTCMediaStreamTrack *> *localTracks;
 @property (nonatomic, strong) NSMutableDictionary<NSNumber *, FlutterRTCVideoRenderer *> *renders;
+@property (nonatomic, strong) NSMutableDictionary<NSNumber *, FlutterRTCMediaRecorder *> *recorders;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, CapturerStopHandler> *videoCapturerStopHandlers;
 
 #if TARGET_OS_IPHONE

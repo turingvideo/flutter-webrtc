@@ -7,11 +7,15 @@ environment:
   flutter: '>=1.22.0'
 
 dependencies:
-  dart_webrtc: 1.0.11
+  dart_webrtc:
+    git:
+      url: git@github.com:turingvideo/dart-webrtc.git
+      ref: 6b02df6d3cd1d1f62b41b3ca8a75aebdf0a0287c
+
   flutter:
     sdk: flutter
   path_provider: ^2.0.2
-  webrtc_interface: 1.0.10
+#  webrtc_interface: 1.0.10
 
 dev_dependencies:
   flutter_test:
