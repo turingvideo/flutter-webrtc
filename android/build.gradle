@@ -49,8 +49,8 @@ android {
 }
 
 dependencies {
-//    implementation 'com.github.turingvideo:webrtc-android:104.5112.06.3'
-    implementation project(path: ':webrtclib')
+    implementation 'com.github.turingvideo:webrtc-android:104.5112.06.3'
+//    implementation project(path: ':webrtclib')
 
     implementation "com.twilio:audioswitch:1.1.5"
     implementation 'androidx.annotation:annotation:1.1.0'
