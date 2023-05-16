@@ -17,7 +17,8 @@ class PlayerSampleState extends State<PlayerSample> {
   WebRTCPlayerController playerController = WebRTCPlayerController();
   TextEditingController textEditingController = TextEditingController();
 
-  String url = 'webrtc';
+  String url =
+      'webrtc://dev-stream-ka.turingvideo.cn/live/8107/8e284804474d507417b201ccd8b3ed04';
 
   bool isCodeH264 = true;
 
@@ -53,6 +54,7 @@ class PlayerSampleState extends State<PlayerSample> {
       body: ListView(
         children: [
           TextField(
+            style: TextStyle(fontSize: 10),
             controller: textEditingController,
             onChanged: (v) {
               setState(() {
