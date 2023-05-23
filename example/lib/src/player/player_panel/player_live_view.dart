@@ -92,3 +92,25 @@ class PlayerLiveView extends PlayerViewWidget {
     );
   }
 }
+
+class MultiRTCView extends PlayerViewWidget {
+  MultiRTCView(this.width, this.height);
+
+  final double width;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: width,
+      height: height,
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.black12, Colors.black],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
+      ),
+    );
+  }
+}
