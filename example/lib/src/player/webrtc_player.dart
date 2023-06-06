@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -44,20 +45,45 @@ class WebRTCPlayer {
             ?.call(webrtc.RTCPeerConnectionState.RTCPeerConnectionStateFailed);
         return;
       }
-      print('WebRTC: createPeerConnection done');
+      print('play*** WebRTC: createPeerConnection done');
 
       _pc!.onConnectionState = (webrtc.RTCPeerConnectionState state) {
-        print("==================== RTCPeerConnectionState = $state");
+        print("play***==================== RTCPeerConnectionState = $state");
         _onConnectionState?.call(state);
       };
 
       _pc!.onIceConnectionState = (webrtc.RTCIceConnectionState state) {
-        // info("==================== RTCIceConnectionState = $state");
+        print("play***==================== RTCIceConnectionState = $state");
       };
 
       // Setup the peer connection.
       _pc!.onAddStream = (webrtc.MediaStream stream) {
-        print('WebRTC: got stream ${stream.id}');
+
+        // final video = stream.getVideoTracks().first;
+
+        // Timer.periodic(const Duration(milliseconds: 100), (timer) async {
+
+        //   final reports = await _pc?.getStats(video) ?? [];
+
+        //   if (reports.isNotEmpty) {
+
+        //     final bytesReceived = reports
+        //             .firstWhere((e) => e.type == 'inbound-rtp')
+        //             .values['bytesReceived'] ??
+        //         0;
+
+        //     print(
+        //       'play**_track=============== bytes received = $bytesReceived, ${timer.tick}',
+        //     );
+
+        //     if (bytesReceived > 0) {
+        //       timer.cancel();
+        //     }
+
+        //   }
+
+        // });
+
         _onRemoteStream?.call(stream);
       };
 
@@ -73,7 +99,7 @@ class WebRTCPlayer {
           direction: webrtc.TransceiverDirection.RecvOnly,
         ),
       );
-      print('WebRTC: Setup PC done, A|V RecvOnly');
+      print('play***WebRTC: Setup PC done, A|V RecvOnly');
 
       // Start SDP handshake.
       webrtc.RTCSessionDescription offer = await _pc!.createOffer({
@@ -81,13 +107,13 @@ class WebRTCPlayer {
       });
       await _pc!.setLocalDescription(offer);
       print(
-        'WebRTC: createOffer, ${offer.type} is ${offer.sdp?.replaceAll('\n', '\\n').replaceAll('\r', '\\r')}',
+        'play***WebRTC: createOffer, ${offer.type} is ${offer.sdp?.replaceAll('\n', '\\n').replaceAll('\r', '\\r')}',
       );
 
       webrtc.RTCSessionDescription? answer = await _handshake(url, offer.sdp);
 
       print(
-        'WebRTC: got answer ${answer?.type} is ${answer?.sdp?.replaceAll('\n', '\\n').replaceAll('\r', '\\r')}',
+        'play***WebRTC: got answer ${answer?.type} is ${answer?.sdp?.replaceAll('\n', '\\n').replaceAll('\r', '\\r')}',
       );
 
       if (answer != null) {
@@ -101,7 +127,7 @@ class WebRTCPlayer {
             ?.call(webrtc.RTCPeerConnectionState.RTCPeerConnectionStateFailed);
       }
     } catch (e) {
-      print('WebRTC error : ${e.toString()}');
+      print('play***WebRTC error : ${e.toString()}');
       _onConnectionState
           ?.call(webrtc.RTCPeerConnectionState.RTCPeerConnectionStateFailed);
     }
@@ -123,6 +149,8 @@ class WebRTCPlayer {
       // Parsing the WebRTC uri form url.
       _WebRTCUri uri = _WebRTCUri.parse(url);
 
+      print('_handshake url: ${uri.api}');
+
       // Do signaling for WebRTC.
       // @see https://github.com/rtcdn/rtcdn-draft
       //
@@ -143,16 +171,24 @@ class WebRTCPlayer {
       String reply = await res.transform(utf8.decoder).join();
       // info('WebRTC reply: ${reply.length}B, ${res.statusCode}');
 
+      print('_handshake response body: $reply');
+
       Map<String, dynamic> o = json.decode(reply);
-      // info('WebRTC reply: ${o.toString()}');
+
+      print('_handshake json: $o');
+
       if (!o.containsKey('code') || !o.containsKey('sdp') || o['code'] != 0) {
         throw Future.error(reply);
       }
 
+      print('_handshake sdp: ${o['sdp']}');
+
       return Future.value(webrtc.RTCSessionDescription(o['sdp'], 'answer'));
     } catch (error) {
+      print('_handshake error: ${error.toString()}');
       return null;
     } finally {
+      print('_handshake finally');
       client.close();
     }
   }

@@ -180,9 +180,9 @@ class _WebRTCPlayerControlsState extends State<WebRTCPlayerControls>
     _player.onRemoteStream = (webrtc.MediaStream stream) {
       stream.getAudioTracks()[0].enabled = false;
       // @remark It's very important to use setState to set the srcObject and notify render.
-      // info('============= stream = ${stream.id}, hashcode = $hashCode');
+      print('play**============= stream = ${stream.id}, hashcode = $hashCode');
       widget.controller.setStream(stream.id);
-      // info('${stream.getVideoTracks().map((e) => e.id)}');
+      print('play**==${stream.getVideoTracks().map((e) => e.id)}');
       setState(() {
         _video.srcObject = stream;
       });
