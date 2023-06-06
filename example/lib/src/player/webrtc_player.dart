@@ -58,31 +58,30 @@ class WebRTCPlayer {
 
       // Setup the peer connection.
       _pc!.onAddStream = (webrtc.MediaStream stream) {
+        final tracks = stream.getVideoTracks();
 
-        // final video = stream.getVideoTracks().first;
+        if (tracks.isNotEmpty) {
+          final video = tracks.first;
 
-        // Timer.periodic(const Duration(milliseconds: 100), (timer) async {
+          Timer.periodic(const Duration(milliseconds: 100), (timer) async {
+            final reports = await _pc?.getStats(video) ?? [];
 
-        //   final reports = await _pc?.getStats(video) ?? [];
+            if (reports.isNotEmpty) {
+              final bytesReceived = reports
+                      .firstWhere((e) => e.type == 'inbound-rtp')
+                      .values['bytesReceived'] ??
+                  0;
 
-        //   if (reports.isNotEmpty) {
+              print(
+                'play**_track=============== url: $url, bytes received = $bytesReceived, ${timer.tick}',
+              );
 
-        //     final bytesReceived = reports
-        //             .firstWhere((e) => e.type == 'inbound-rtp')
-        //             .values['bytesReceived'] ??
-        //         0;
-
-        //     print(
-        //       'play**_track=============== bytes received = $bytesReceived, ${timer.tick}',
-        //     );
-
-        //     if (bytesReceived > 0) {
-        //       timer.cancel();
-        //     }
-
-        //   }
-
-        // });
+              if (bytesReceived > 0) {
+                timer.cancel();
+              }
+            }
+          });
+        }
 
         _onRemoteStream?.call(stream);
       };

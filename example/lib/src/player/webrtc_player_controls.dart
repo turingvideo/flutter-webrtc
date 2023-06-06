@@ -167,7 +167,7 @@ class _WebRTCPlayerControlsState extends State<WebRTCPlayerControls>
 
   void autoPlay(String url) async {
     _video.onDidFirstRendered = () {
-      // debug("=============== on did render video, id = $hashCode");
+      print("=============== on did render video, id = $hashCode");
       widget.controller.setPlay();
     };
 
