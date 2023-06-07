@@ -29,12 +29,12 @@ const streamUrls = <String>[
   // 'webrtc://dev-stream-go.turingvideo.com/live/8707/0216dda1763af9cfc2dc17ca4bbe8539',
 
   // dog food
-  'webrtc://test-srs-1.turingvideo.com/live/21065/e30682d57badbd061c375a484998b0c2',
-  // 'webrtc://test-srs-1.turingvideo.com/live/20948/7a6e3120ab1c5a8f630a82b033dd37fe',
-  // 'webrtc://test-srs-1.turingvideo.com/live/20952/3e81e8b48051a50efcc0486400a616f4',
-  // 'webrtc://test-srs-1.turingvideo.com/live/20945/a4553662cf30542c761cd6440b9f37c4',
-  // 'webrtc://test-srs-1.turingvideo.com/live/20892/d4f9a1da2a88fb7ed895f3b983a59003',
-  // 'webrtc://test-srs-1.turingvideo.com/live/20891/9f2f289f7d366f7408c539444180418b',
+  'webrtc://test-srs-2.turingvideo.com/live/20945/a4553662cf30542c761cd6440b9f37c4',
+  // 'webrtc://test-srs-2.turingvideo.com/live/20892/d4f9a1da2a88fb7ed895f3b983a59003',
+  // 'webrtc://test-srs-2.turingvideo.com/live/21065/e30682d57badbd061c375a484998b0c2',
+  // 'webrtc://test-srs-2.turingvideo.com/live/20891/9f2f289f7d366f7408c539444180418b',
+  // 'webrtc://test-srs-2.turingvideo.com/live/20952/3e81e8b48051a50efcc0486400a616f4',
+  // 'webrtc://test-srs-2.turingvideo.com/live/20948/7a6e3120ab1c5a8f630a82b033dd37fe',
 ];
 
 class MultiRTCStream extends StatefulWidget {
