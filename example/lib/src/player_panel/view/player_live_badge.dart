@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:turing_mobile/turing_components.dart';
+
 
 class PlayerLiveBadge extends StatelessWidget {
   const PlayerLiveBadge({Key? key}) : super(key: key);
@@ -24,7 +26,7 @@ class PlayerLiveBadge extends StatelessWidget {
                 decoration: const BoxDecoration(
                     shape: BoxShape.circle, color: Colors.blue)),
             const SizedBox(width: 4),
-            Text("Live", style: TextStyle(color: Colors.white, fontSize: 11)),
+            Text("Live", style: const TextStyle().size13.white),
           ],
         ),
       ),

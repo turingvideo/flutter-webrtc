@@ -1,35 +1,19 @@
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_webrtc/flutter_webrtc.dart' as webrtc;
+import 'package:turing_mobile/turing_foundation.dart';
 
-class WebRTCPlayer {
-  Function(webrtc.MediaStream stream)? _onRemoteStream;
+class WebRTCPublisher {
   webrtc.RTCPeerConnection? _pc;
   Function(webrtc.RTCPeerConnectionState state)? _onConnectionState;
-
-  /// When got a remote stream.
-  set onRemoteStream(Function(webrtc.MediaStream stream) v) =>
-      _onRemoteStream = v;
 
   set onConnectionState(Function(webrtc.RTCPeerConnectionState state) s) =>
       _onConnectionState = s;
 
-  /// Initialize the player.
   void initState() {}
 
-  List<webrtc.MediaStream?>? get remoteStreams => _pc?.getRemoteStreams();
-  webrtc.MediaStream? getRemoteStream(String streamId) =>
-      remoteStreams?.firstWhere((element) => element?.id == streamId);
-
-  Future<List<webrtc.StatsReport>>? getStats(
-          [webrtc.MediaStreamTrack? track]) =>
-      _pc?.getStats(track);
-
-  /// Start play a url.
-  /// [url] must a path parsed by [WebRTCUri.parse] in https://github.com/rtcdn/rtcdn-draft
-  Future<void> play(String url) async {
+  Future<void> publish(String url, webrtc.MediaStream stream) async {
     try {
       await _pc?.close();
       _pc = null;
@@ -45,80 +29,49 @@ class WebRTCPlayer {
             ?.call(webrtc.RTCPeerConnectionState.RTCPeerConnectionStateFailed);
         return;
       }
-      print('play*** WebRTC: createPeerConnection done');
+      info('WebRTC: createPeerConnection done');
 
       _pc!.onConnectionState = (webrtc.RTCPeerConnectionState state) {
-        print("play***==================== RTCPeerConnectionState = $state");
+        info("==================== RTCPeerConnectionState = $state");
         _onConnectionState?.call(state);
       };
 
       _pc!.onIceConnectionState = (webrtc.RTCIceConnectionState state) {
-        print("play***==================== RTCIceConnectionState = $state");
-      };
-
-      // Setup the peer connection.
-      _pc!.onAddStream = (webrtc.MediaStream stream) {
-        final tracks = stream.getVideoTracks();
-
-        if (tracks.isNotEmpty) {
-          final video = tracks.first;
-
-          Timer.periodic(const Duration(milliseconds: 100), (timer) async {
-            final reports = await _pc?.getStats(video) ?? [];
-
-            if (reports.isNotEmpty) {
-              final bytesReceived = reports
-                      .firstWhere((e) => e.type == 'inbound-rtp')
-                      .values['bytesReceived'] ??
-                  0;
-
-              print(
-                'play**_track=============== url: $url, bytes received = $bytesReceived, ${timer.tick}',
-              );
-
-              if (bytesReceived > 0) {
-                timer.cancel();
-              }
-            }
-          });
-        }
-
-        _onRemoteStream?.call(stream);
+        info("==================== RTCIceConnectionState = $state");
       };
 
       _pc!.addTransceiver(
+        track: stream.getAudioTracks()[0],
         kind: webrtc.RTCRtpMediaType.RTCRtpMediaTypeAudio,
         init: webrtc.RTCRtpTransceiverInit(
-            direction: webrtc.TransceiverDirection.RecvOnly),
+            direction: webrtc.TransceiverDirection.SendOnly),
       );
 
-      _pc!.addTransceiver(
-        kind: webrtc.RTCRtpMediaType.RTCRtpMediaTypeVideo,
-        init: webrtc.RTCRtpTransceiverInit(
-          direction: webrtc.TransceiverDirection.RecvOnly,
-        ),
-      );
-      print('play***WebRTC: Setup PC done, A|V RecvOnly');
+      info('WebRTC: Setup PC done, Audio SendOnly');
 
       // Start SDP handshake.
       webrtc.RTCSessionDescription offer = await _pc!.createOffer({
-        'mandatory': {'OfferToReceiveAudio': true, 'OfferToReceiveVideo': true},
+        'mandatory': {
+          'OfferToReceiveAudio': false,
+          'OfferToReceiveVideo': false
+        },
       });
       await _pc!.setLocalDescription(offer);
-      print(
-        'play***WebRTC: createOffer, ${offer.type} is ${offer.sdp?.replaceAll('\n', '\\n').replaceAll('\r', '\\r')}',
-      );
+      final sdpList = offer.sdp!.split('\r\n');
+      final index = sdpList.indexWhere((e) => e.contains('a=rtpmap'));
+      sdpList[index] = 'a=rtpmap:0 PCMU/8000';
+      final sdp = sdpList.join('\r\n').replaceAll('SAVPF', 'SAVPF 0');
+      // info(
+      //     'WebRTC: createOffer, ${offer.type} is ${offer.sdp?.replaceAll('\n', '\\n').replaceAll('\r', '\\r')}');
 
-      webrtc.RTCSessionDescription? answer = await _handshake(url, offer.sdp);
+      webrtc.RTCSessionDescription? answer = await _handshake(url, sdp);
 
-      print(
-        'play***WebRTC: got answer ${answer?.type} is ${answer?.sdp?.replaceAll('\n', '\\n').replaceAll('\r', '\\r')}',
-      );
+      // info(
+      //     'WebRTC: got ${answer?.type} is ${answer?.sdp?.replaceAll('\n', '\\n').replaceAll('\r', '\\r')}');
 
       if (answer != null) {
-        // info(
-        //     'WebRTC: setRemoteDescription previous, answer = ${answer.toMap()}');
-        await _pc!.setRemoteDescription(answer);
+        _pc!.setRemoteDescription(answer);
+        // info('WebRTC: setRemoteDescription');
         _onConnectionState?.call(
             webrtc.RTCPeerConnectionState.RTCPeerConnectionStateConnecting);
       } else {
@@ -126,7 +79,6 @@ class WebRTCPlayer {
             ?.call(webrtc.RTCPeerConnectionState.RTCPeerConnectionStateFailed);
       }
     } catch (e) {
-      print('play***WebRTC error : ${e.toString()}');
       _onConnectionState
           ?.call(webrtc.RTCPeerConnectionState.RTCPeerConnectionStateFailed);
     }
@@ -134,9 +86,7 @@ class WebRTCPlayer {
 
   /// Handshake to exchange SDP, send offer and got answer.
   Future<webrtc.RTCSessionDescription?> _handshake(
-    String url,
-    String? offer,
-  ) async {
+      String url, String? offer) async {
     // Setup the client for HTTP or HTTPS.
     HttpClient client = HttpClient();
 
@@ -148,8 +98,6 @@ class WebRTCPlayer {
       // Parsing the WebRTC uri form url.
       _WebRTCUri uri = _WebRTCUri.parse(url);
 
-      print('_handshake url: ${uri.api}');
-
       // Do signaling for WebRTC.
       // @see https://github.com/rtcdn/rtcdn-draft
       //
@@ -159,42 +107,30 @@ class WebRTCPlayer {
       //    {code: 0, sdp: "answer", sessionid: "007r51l7:X2Lv"}
       HttpClientRequest req = await client.postUrl(Uri.parse(uri.api));
       req.headers.set('Content-Type', 'application/json');
-      req.add(utf8.encode(json.encode({
-        'api': uri.api,
-        'streamurl': uri.streamUrl,
-        'sdp': offer,
-      })));
+      req.add(utf8.encode(json
+          .encode({'api': uri.api, 'streamurl': uri.streamUrl, 'sdp': offer})));
       // info('WebRTC request: ${uri.api} offer=${offer?.length}B');
 
       HttpClientResponse res = await req.close();
       String reply = await res.transform(utf8.decoder).join();
       // info('WebRTC reply: ${reply.length}B, ${res.statusCode}');
 
-      print('_handshake response body: $reply');
-
       Map<String, dynamic> o = json.decode(reply);
-
-      print('_handshake json: $o');
-
+      // info('WebRTC reply: ${o.toString()}');
       if (!o.containsKey('code') || !o.containsKey('sdp') || o['code'] != 0) {
         throw Future.error(reply);
       }
 
-      print('_handshake sdp: ${o['sdp']}');
-
       return Future.value(webrtc.RTCSessionDescription(o['sdp'], 'answer'));
     } catch (error) {
-      print('_handshake error: ${error.toString()}');
       return null;
     } finally {
-      print('_handshake finally');
       client.close();
     }
   }
 
   /// Dispose the player.
   void dispose() {
-    _onRemoteStream = null;
     _onConnectionState = null;
     _pc?.close();
     _pc = null;
@@ -229,14 +165,14 @@ class _WebRTCUri {
       port = (uri.port > 0) ? uri.port : 1985;
     }
 
-    var api = '/rtc/v1/play/';
-    if (uri.queryParameters.containsKey('play')) {
-      api = uri.queryParameters['play']!;
+    var api = '/rtc/v1/publish/';
+    if (uri.queryParameters.containsKey('publish')) {
+      api = uri.queryParameters['publish']!;
     }
 
     var apiParams = [];
     for (var key in uri.queryParameters.keys) {
-      if (key != 'api' && key != 'play' && key != 'schema') {
+      if (key != 'api' && key != 'publish' && key != 'schema') {
         apiParams.add('$key=${uri.queryParameters[key]}');
       }
     }
@@ -247,7 +183,7 @@ class _WebRTCUri {
     }
 
     _WebRTCUri r = _WebRTCUri(api: apiUrl, streamUrl: url);
-    print('Url:$url\napi:${r.api}\nstream:${r.streamUrl}');
+    verbose('Url:$url\napi:${r.api}\nstream:${r.streamUrl}');
     return r;
   }
 }

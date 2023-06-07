@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_webrtc_example/src/player/player_panel/player_live_view.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_webrtc_example/src/nest_camera.dart';
 
-import 'player/player_panel/player_settings.dart';
-import 'player/player_panel/webrtc_player_panel.dart';
-import 'player/webrtc_player_controller.dart';
-import 'player/webrtc_player_controls.dart';
-import 'player/webrtc_player_state.dart';
+import 'package:flutter_webrtc_example/src/player_panel/player_settings.dart';
+import 'package:flutter_webrtc_example/src/webrtc_player/webrtc_player_controller.dart';
+import 'package:flutter_webrtc_example/src/webrtc_player/webrtc_player_cubit.dart';
+
+import 'webrtc_player/webrtc_player_view.dart';
 
 const streamUrls = <String>[
   // 'webrtc://dev-stream-go.turingvideo.com/live/8648/745468d84ca429e88bd6dd4314c8d131',
@@ -21,8 +22,8 @@ const streamUrls = <String>[
   // 'webrtc://dev-stream-go.turingvideo.com/live/8708/8d69e00aab935f213c994ca6f5c23d1d',
   // 'webrtc://dev-stream-go.turingvideo.com/live/8718/06dfcff50e644e7cf6cc24c05893faf0',
   'webrtc://dev-stream-go.turingvideo.com/live/8715/236ff525af80a8d0c1963f28097489d6',
-  'webrtc://dev-stream-go.turingvideo.com/live/8710/06961ab2bb89412b234901d927a05c9a',
-  'webrtc://dev-stream-go.turingvideo.com/live/8709/d04af62f3732748ae5b0ba09929c1c9c',
+  // 'webrtc://dev-stream-go.turingvideo.com/live/8710/06961ab2bb89412b234901d927a05c9a',
+  // 'webrtc://dev-stream-go.turingvideo.com/live/8709/d04af62f3732748ae5b0ba09929c1c9c',
   // 'webrtc://dev-stream-go.turingvideo.com/live/8704/65579840d93e1b9e9b07d8d55d027282',
   // 'webrtc://dev-stream-go.turingvideo.com/live/8712/630cd6ee395d2971f1599a1062d5b06b',
   // 'webrtc://dev-stream-go.turingvideo.com/live/8707/0216dda1763af9cfc2dc17ca4bbe8539',
@@ -36,27 +37,9 @@ class MultiRTCStream extends StatefulWidget {
 }
 
 class _MultiRTCStreamState extends State<MultiRTCStream> {
-  // WebRTCPlayerController playerController6 = WebRTCPlayerController();
-
-  // WebRTCPlayerController playerController7 = WebRTCPlayerController();
-  // WebRTCPlayerController playerController8 = WebRTCPlayerController();
-  // WebRTCPlayerController playerController9 = WebRTCPlayerController();
-
-  WebRTCPlayerController playerController3 = WebRTCPlayerController();
-  WebRTCPlayerController playerController1 = WebRTCPlayerController();
-  // WebRTCPlayerController playerController4 = WebRTCPlayerController();
-  // WebRTCPlayerController playerController5 = WebRTCPlayerController();
-
-  WebRTCPlayerController playerController2 = WebRTCPlayerController();
-
-  // WebRTCPlayerController playerController10 = WebRTCPlayerController();
-
-  // WebRTCPlayerController playerController11 = WebRTCPlayerController();
-  // WebRTCPlayerController playerController12 = WebRTCPlayerController();
-  // WebRTCPlayerController playerController13 = WebRTCPlayerController();
-  // WebRTCPlayerController playerController14 = WebRTCPlayerController();
-  // WebRTCPlayerController playerController15 = WebRTCPlayerController();
-  // WebRTCPlayerController playerController16 = WebRTCPlayerController();
+  final cubit1 = WebrtcPlayerCubit(
+    camera: NestCamera(1, '1'),
+  );
 
   void play() {
     // playerController9.setDataSource(url: streamUrls[8]);
@@ -66,10 +49,10 @@ class _MultiRTCStreamState extends State<MultiRTCStream> {
     // playerController8.setDataSource(url: streamUrls[7]);
     // playerController7.setDataSource(url: streamUrls[6]);
 
-    playerController1.setDataSource(url: streamUrls[0]);
-    playerController2.setDataSource(url: streamUrls[1]);
+    cubit1.playerController.setDataSource(url: streamUrls[0]);
+    // playerController2.setDataSource(url: streamUrls[1]);
 
-    playerController3.setDataSource(url: streamUrls[2]);
+    // playerController3.setDataSource(url: streamUrls[2]);
     // playerController4.setDataSource(url: streamUrls[3]);
     // playerController5.setDataSource(url: streamUrls[4]);
 
@@ -84,9 +67,9 @@ class _MultiRTCStreamState extends State<MultiRTCStream> {
 
   @override
   void dispose() {
-    playerController1.dispose();
-    playerController2.dispose();
-    playerController3.dispose();
+    cubit1.close();
+    // playerController2.dispose();
+    // playerController3.dispose();
     // playerController4.dispose();
     // playerController5.dispose();
     // playerController6.dispose();
@@ -137,54 +120,49 @@ class _MultiRTCStreamState extends State<MultiRTCStream> {
               spacing: 2,
               runSpacing: 2,
               children: [
-                SizedBox(
-                  width: w,
-                  height: h,
-                  child: WebRTCPlayerControls(
-                    code: WebrtcCodeType.h264,
-                    controller: playerController1,
-                    panelBuilder: (context, rect) {
-                      return WebrtcPlayerPanel(
-                        controller: playerController1,
-                        texturePos: rect,
-                        settings: PlayerSettings.live(),
-                        builder: (context) => MultiRTCView(w, h),
-                      );
-                    },
+                BlocProvider.value(
+                  value: cubit1,
+                  child: SizedBox(
+                    width: w,
+                    height: h,
+                    child: WebrtcPlayerView(
+                      settings: PlayerSettings.live(),
+                    ),
                   ),
                 ),
-                SizedBox(
-                  width: w,
-                  height: h,
-                  child: WebRTCPlayerControls(
-                    code: WebrtcCodeType.h264,
-                    controller: playerController2,
-                    panelBuilder: (context, rect) {
-                      return WebrtcPlayerPanel(
-                        controller: playerController2,
-                        texturePos: rect,
-                        settings: PlayerSettings.live(),
-                        builder: (context) => MultiRTCView(w, h),
-                      );
-                    },
-                  ),
-                ),
-                SizedBox(
-                  width: w,
-                  height: h,
-                  child: WebRTCPlayerControls(
-                    code: WebrtcCodeType.h264,
-                    controller: playerController3,
-                    panelBuilder: (context, rect) {
-                      return WebrtcPlayerPanel(
-                        controller: playerController3,
-                        texturePos: rect,
-                        settings: PlayerSettings.live(),
-                        builder: (context) => MultiRTCView(w, h),
-                      );
-                    },
-                  ),
-                ),
+
+                // SizedBox(
+                //   width: w,
+                //   height: h,
+                //   child: WebRTCPlayerControls(
+                //     code: WebrtcCodeType.h264,
+                //     controller: playerController2,
+                //     panelBuilder: (context, rect) {
+                //       return WebrtcPlayerPanel(
+                //         controller: playerController2,
+                //         texturePos: rect,
+                //         settings: PlayerSettings.live(),
+                //         builder: (context) => MultiRTCView(w, h),
+                //       );
+                //     },
+                //   ),
+                // ),
+                // SizedBox(
+                //   width: w,
+                //   height: h,
+                //   child: WebRTCPlayerControls(
+                //     code: WebrtcCodeType.h264,
+                //     controller: playerController3,
+                //     panelBuilder: (context, rect) {
+                //       return WebrtcPlayerPanel(
+                //         controller: playerController3,
+                //         texturePos: rect,
+                //         settings: PlayerSettings.live(),
+                //         builder: (context) => MultiRTCView(w, h),
+                //       );
+                //     },
+                //   ),
+                // ),
                 // SizedBox(
                 //   width: w,
                 //   height: h,

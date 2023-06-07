@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_webrtc/flutter_webrtc.dart' as webrtc;
 import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:turing_mobile/turing_foundation.dart';
 
 class WebRTCDataChannel {
   webrtc.RTCPeerConnection? _pc;
@@ -49,7 +50,7 @@ class WebRTCDataChannel {
           ?.call(webrtc.RTCPeerConnectionState.RTCPeerConnectionStateFailed);
       return;
     }
-    print('WebRTC: createPeerConnection done');
+    info('WebRTC: createPeerConnection done');
 
     _dc = await _pc!.createDataChannel('label', RTCDataChannelInit());
     if (_dc == null) {
@@ -57,28 +58,28 @@ class WebRTCDataChannel {
           ?.call(webrtc.RTCPeerConnectionState.RTCPeerConnectionStateFailed);
       return;
     }
-    print('WebRTC: createDataChannel done');
+    info('WebRTC: createDataChannel done');
 
     _pc!.onConnectionState = (webrtc.RTCPeerConnectionState state) {
-      print("==================== RTCPeerConnectionState = $state");
+      info("==================== RTCPeerConnectionState = $state");
       _onConnectionState?.call(state);
     };
 
     _pc!.onIceConnectionState = (webrtc.RTCIceConnectionState state) {
-      print("==================== RTCIceConnectionState = $state");
+      info("==================== RTCIceConnectionState = $state");
     };
 
     _pc!.onDataChannel = (webrtc.RTCDataChannel event) {
-      print("==================== RTCDataChannel = $event");
+      info("==================== RTCDataChannel = $event");
     };
 
     _dc!.onDataChannelState = (webrtc.RTCDataChannelState state) {
-      print("==================== RTCDataChannelState = $state");
+      info("==================== RTCDataChannelState = $state");
       _onDataChannelState?.call(state);
     };
 
     _dc!.onMessage = (webrtc.RTCDataChannelMessage event) {
-      print('Got Data Channel Message: ${event.type}');
+      // info('Got Data Channel Message: ${event.type}');
       // info('Got Data Channel Message: ${event.binary}');
       _onDataChannelMessage?.call(event.binary);
     };
@@ -94,7 +95,7 @@ class WebRTCDataChannel {
 
     if (answer != null) {
       await _pc!.setRemoteDescription(answer);
-      print('WebRTC: setRemoteDescription');
+      info('WebRTC: setRemoteDescription');
       _onConnectionState?.call(
           webrtc.RTCPeerConnectionState.RTCPeerConnectionStateConnecting);
     } else {
@@ -132,14 +133,14 @@ class WebRTCDataChannel {
         'sdp': offer,
         "bitrate": bitRate
       })));
-      print('WebRTC request: ${uri.api} offer=${offer?.length}B');
+      info('WebRTC request: ${uri.api} offer=${offer?.length}B');
 
       HttpClientResponse res = await req.close();
       String reply = await res.transform(utf8.decoder).join();
-      print('WebRTC reply: ${reply.length}B, ${res.statusCode}');
+      info('WebRTC reply: ${reply.length}B, ${res.statusCode}');
 
       Map<String, dynamic> o = json.decode(reply);
-      print('WebRTC reply: ${o.toString()}');
+      info('WebRTC reply: ${o.toString()}');
       if (!o.containsKey('code') || !o.containsKey('sdp') || o['code'] != 0) {
         return Future.error(reply);
       }
@@ -154,7 +155,7 @@ class WebRTCDataChannel {
 
   /// Dispose the player.
   void dispose() {
-    print('WebRTC Data Channel dispose====================================');
+    info('WebRTC Data Channel dispose====================================');
     _onDataChannelMessage = null;
     _onDataChannelState = null;
     _dc?.close();
@@ -210,7 +211,7 @@ class _WebRTCUri {
     }
 
     _WebRTCUri r = _WebRTCUri(api: apiUrl, streamUrl: url);
-    print('Url:$url\napi:${r.api}\nstream:${r.streamUrl}');
+    verbose('Url:$url\napi:${r.api}\nstream:${r.streamUrl}');
     return r;
   }
 }
