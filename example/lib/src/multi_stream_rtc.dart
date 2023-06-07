@@ -3,7 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_webrtc_example/src/nest_camera.dart';
 
 import 'package:flutter_webrtc_example/src/player_panel/player_settings.dart';
-import 'package:flutter_webrtc_example/src/webrtc_player/webrtc_player_controller.dart';
+
 import 'package:flutter_webrtc_example/src/webrtc_player/webrtc_player_cubit.dart';
 
 import 'webrtc_player/webrtc_player_view.dart';
@@ -21,12 +21,20 @@ const streamUrls = <String>[
   // test stream
   // 'webrtc://dev-stream-go.turingvideo.com/live/8708/8d69e00aab935f213c994ca6f5c23d1d',
   // 'webrtc://dev-stream-go.turingvideo.com/live/8718/06dfcff50e644e7cf6cc24c05893faf0',
-  'webrtc://dev-stream-go.turingvideo.com/live/8715/236ff525af80a8d0c1963f28097489d6',
+  // 'webrtc://dev-stream-go.turingvideo.com/live/8715/236ff525af80a8d0c1963f28097489d6',
   // 'webrtc://dev-stream-go.turingvideo.com/live/8710/06961ab2bb89412b234901d927a05c9a',
   // 'webrtc://dev-stream-go.turingvideo.com/live/8709/d04af62f3732748ae5b0ba09929c1c9c',
   // 'webrtc://dev-stream-go.turingvideo.com/live/8704/65579840d93e1b9e9b07d8d55d027282',
   // 'webrtc://dev-stream-go.turingvideo.com/live/8712/630cd6ee395d2971f1599a1062d5b06b',
   // 'webrtc://dev-stream-go.turingvideo.com/live/8707/0216dda1763af9cfc2dc17ca4bbe8539',
+
+  // dog food
+  'webrtc://test-srs-1.turingvideo.com/live/21065/e30682d57badbd061c375a484998b0c2',
+  // 'webrtc://test-srs-1.turingvideo.com/live/20948/7a6e3120ab1c5a8f630a82b033dd37fe',
+  // 'webrtc://test-srs-1.turingvideo.com/live/20952/3e81e8b48051a50efcc0486400a616f4',
+  // 'webrtc://test-srs-1.turingvideo.com/live/20945/a4553662cf30542c761cd6440b9f37c4',
+  // 'webrtc://test-srs-1.turingvideo.com/live/20892/d4f9a1da2a88fb7ed895f3b983a59003',
+  // 'webrtc://test-srs-1.turingvideo.com/live/20891/9f2f289f7d366f7408c539444180418b',
 ];
 
 class MultiRTCStream extends StatefulWidget {
@@ -37,54 +45,30 @@ class MultiRTCStream extends StatefulWidget {
 }
 
 class _MultiRTCStreamState extends State<MultiRTCStream> {
-  final cubit1 = WebrtcPlayerCubit(
-    camera: NestCamera(1, '1'),
-  );
+  final cubit1 = WebrtcPlayerCubit(camera: NestCamera(1, '1'));
+  // final cubit2 = WebrtcPlayerCubit(camera: NestCamera(2, '2'));
+  // final cubit3 = WebrtcPlayerCubit(camera: NestCamera(3, '3'));
+  // final cubit4 = WebrtcPlayerCubit(camera: NestCamera(4, '4'));
+  // final cubit5 = WebrtcPlayerCubit(camera: NestCamera(5, '5'));
+  // final cubit6 = WebrtcPlayerCubit(camera: NestCamera(6, '6'));
 
   void play() {
-    // playerController9.setDataSource(url: streamUrls[8]);
-
-    // playerController6.setDataSource(url: streamUrls[5]);
-
-    // playerController8.setDataSource(url: streamUrls[7]);
-    // playerController7.setDataSource(url: streamUrls[6]);
-
     cubit1.playerController.setDataSource(url: streamUrls[0]);
-    // playerController2.setDataSource(url: streamUrls[1]);
-
-    // playerController3.setDataSource(url: streamUrls[2]);
-    // playerController4.setDataSource(url: streamUrls[3]);
-    // playerController5.setDataSource(url: streamUrls[4]);
-
-    // playerController10.setDataSource(url: streamUrls[9]);
-    // playerController11.setDataSource(url: streamUrls[10]);
-    // playerController12.setDataSource(url: streamUrls[11]);
-    // playerController13.setDataSource(url: streamUrls[12]);
-    // playerController14.setDataSource(url: streamUrls[13]);
-    // playerController15.setDataSource(url: streamUrls[14]);
-    // playerController16.setDataSource(url: streamUrls[15]);
+    // cubit2.playerController.setDataSource(url: streamUrls[1]);
+    // cubit3.playerController.setDataSource(url: streamUrls[2]);
+    // cubit4.playerController.setDataSource(url: streamUrls[3]);
+    // cubit5.playerController.setDataSource(url: streamUrls[4]);
+    // cubit6.playerController.setDataSource(url: streamUrls[5]);
   }
 
   @override
   void dispose() {
     cubit1.close();
-    // playerController2.dispose();
-    // playerController3.dispose();
-    // playerController4.dispose();
-    // playerController5.dispose();
-    // playerController6.dispose();
-
-    // playerController7.dispose();
-    // playerController8.dispose();
-    // playerController9.dispose();
-
-    // playerController10.dispose();
-    // playerController11.dispose();
-    // playerController12.dispose();
-    // playerController13.dispose();
-    // playerController14.dispose();
-    // playerController15.dispose();
-    // playerController16.dispose();
+    // cubit2.close();
+    // cubit3.close();
+    // cubit4.close();
+    // cubit5.close();
+    // cubit6.close();
 
     super.dispose();
   }
@@ -130,245 +114,54 @@ class _MultiRTCStreamState extends State<MultiRTCStream> {
                     ),
                   ),
                 ),
-
-                // SizedBox(
-                //   width: w,
-                //   height: h,
-                //   child: WebRTCPlayerControls(
-                //     code: WebrtcCodeType.h264,
-                //     controller: playerController2,
-                //     panelBuilder: (context, rect) {
-                //       return WebrtcPlayerPanel(
-                //         controller: playerController2,
-                //         texturePos: rect,
-                //         settings: PlayerSettings.live(),
-                //         builder: (context) => MultiRTCView(w, h),
-                //       );
-                //     },
+                // BlocProvider.value(
+                //   value: cubit2,
+                //   child: SizedBox(
+                //     width: w,
+                //     height: h,
+                //     child: WebrtcPlayerView(
+                //       settings: PlayerSettings.live(),
+                //     ),
                 //   ),
                 // ),
-                // SizedBox(
-                //   width: w,
-                //   height: h,
-                //   child: WebRTCPlayerControls(
-                //     code: WebrtcCodeType.h264,
-                //     controller: playerController3,
-                //     panelBuilder: (context, rect) {
-                //       return WebrtcPlayerPanel(
-                //         controller: playerController3,
-                //         texturePos: rect,
-                //         settings: PlayerSettings.live(),
-                //         builder: (context) => MultiRTCView(w, h),
-                //       );
-                //     },
+                // BlocProvider.value(
+                //   value: cubit3,
+                //   child: SizedBox(
+                //     width: w,
+                //     height: h,
+                //     child: WebrtcPlayerView(
+                //       settings: PlayerSettings.live(),
+                //     ),
                 //   ),
                 // ),
-                // SizedBox(
-                //   width: w,
-                //   height: h,
-                //   child: WebRTCPlayerControls(
-                //     code: WebrtcCodeType.h264,
-                //     controller: playerController4,
-                //     panelBuilder: (context, rect) {
-                //       return WebrtcPlayerPanel(
-                //         controller: playerController4,
-                //         texturePos: rect,
-                //         settings: PlayerSettings.live(),
-                //         builder: (context) => MultiRTCView(w, h),
-                //       );
-                //     },
+                // BlocProvider.value(
+                //   value: cubit4,
+                //   child: SizedBox(
+                //     width: w,
+                //     height: h,
+                //     child: WebrtcPlayerView(
+                //       settings: PlayerSettings.live(),
+                //     ),
                 //   ),
                 // ),
-                // SizedBox(
-                //   width: w,
-                //   height: h,
-                //   child: WebRTCPlayerControls(
-                //     code: WebrtcCodeType.h264,
-                //     controller: playerController5,
-                //     panelBuilder: (context, rect) {
-                //       return WebrtcPlayerPanel(
-                //         controller: playerController5,
-                //         texturePos: rect,
-                //         settings: PlayerSettings.live(),
-                //         builder: (context) => MultiRTCView(w, h),
-                //       );
-                //     },
+                // BlocProvider.value(
+                //   value: cubit5,
+                //   child: SizedBox(
+                //     width: w,
+                //     height: h,
+                //     child: WebrtcPlayerView(
+                //       settings: PlayerSettings.live(),
+                //     ),
                 //   ),
                 // ),
-                // SizedBox(
-                //   width: w,
-                //   height: h,
-                //   child: WebRTCPlayerControls(
-                //     code: WebrtcCodeType.h264,
-                //     controller: playerController6,
-                //     panelBuilder: (context, rect) {
-                //       return WebrtcPlayerPanel(
-                //         controller: playerController6,
-                //         texturePos: rect,
-                //         settings: PlayerSettings.live(),
-                //         builder: (context) => MultiRTCView(w, h),
-                //       );
-                //     },
-                //   ),
-                // ),
-                // SizedBox(
-                //   width: w,
-                //   height: h,
-                //   child: WebRTCPlayerControls(
-                //     code: WebrtcCodeType.h264,
-                //     controller: playerController7,
-                //     panelBuilder: (context, rect) {
-                //       return WebrtcPlayerPanel(
-                //         controller: playerController7,
-                //         texturePos: rect,
-                //         settings: PlayerSettings.live(),
-                //         builder: (context) => MultiRTCView(w, h),
-                //       );
-                //     },
-                //   ),
-                // ),
-                // SizedBox(
-                //   width: w,
-                //   height: h,
-                //   child: WebRTCPlayerControls(
-                //     code: WebrtcCodeType.h264,
-                //     controller: playerController8,
-                //     panelBuilder: (context, rect) {
-                //       return WebrtcPlayerPanel(
-                //         controller: playerController8,
-                //         texturePos: rect,
-                //         settings: PlayerSettings.live(),
-                //         builder: (context) => MultiRTCView(w, h),
-                //       );
-                //     },
-                //   ),
-                // ),
-                // SizedBox(
-                //   width: w,
-                //   height: h,
-                //   child: WebRTCPlayerControls(
-                //     code: WebrtcCodeType.h264,
-                //     controller: playerController9,
-                //     panelBuilder: (context, rect) {
-                //       return WebrtcPlayerPanel(
-                //         controller: playerController9,
-                //         texturePos: rect,
-                //         settings: PlayerSettings.live(),
-                //         builder: (context) => MultiRTCView(w, h),
-                //       );
-                //     },
-                //   ),
-                // ),
-                // SizedBox(
-                //   width: w,
-                //   height: h,
-                //   child: WebRTCPlayerControls(
-                //     code: WebrtcCodeType.h264,
-                //     controller: playerController10,
-                //     panelBuilder: (context, rect) {
-                //       return WebrtcPlayerPanel(
-                //         controller: playerController10,
-                //         texturePos: rect,
-                //         settings: PlayerSettings.live(),
-                //         builder: (context) => MultiRTCView(w, h),
-                //       );
-                //     },
-                //   ),
-                // ),
-                // SizedBox(
-                //   width: w,
-                //   height: h,
-                //   child: WebRTCPlayerControls(
-                //     code: WebrtcCodeType.h264,
-                //     controller: playerController11,
-                //     panelBuilder: (context, rect) {
-                //       return WebrtcPlayerPanel(
-                //         controller: playerController6,
-                //         texturePos: rect,
-                //         settings: PlayerSettings.live(),
-                //         builder: (context) => MultiRTCView(w, h),
-                //       );
-                //     },
-                //   ),
-                // ),
-                // SizedBox(
-                //   width: w,
-                //   height: h,
-                //   child: WebRTCPlayerControls(
-                //     code: WebrtcCodeType.h264,
-                //     controller: playerController12,
-                //     panelBuilder: (context, rect) {
-                //       return WebrtcPlayerPanel(
-                //         controller: playerController6,
-                //         texturePos: rect,
-                //         settings: PlayerSettings.live(),
-                //         builder: (context) => MultiRTCView(w, h),
-                //       );
-                //     },
-                //   ),
-                // ),
-                // SizedBox(
-                //   width: w,
-                //   height: h,
-                //   child: WebRTCPlayerControls(
-                //     code: WebrtcCodeType.h264,
-                //     controller: playerController13,
-                //     panelBuilder: (context, rect) {
-                //       return WebrtcPlayerPanel(
-                //         controller: playerController6,
-                //         texturePos: rect,
-                //         settings: PlayerSettings.live(),
-                //         builder: (context) => MultiRTCView(w, h),
-                //       );
-                //     },
-                //   ),
-                // ),
-                // SizedBox(
-                //   width: w,
-                //   height: h,
-                //   child: WebRTCPlayerControls(
-                //     code: WebrtcCodeType.h264,
-                //     controller: playerController14,
-                //     panelBuilder: (context, rect) {
-                //       return WebrtcPlayerPanel(
-                //         controller: playerController6,
-                //         texturePos: rect,
-                //         settings: PlayerSettings.live(),
-                //         builder: (context) => MultiRTCView(w, h),
-                //       );
-                //     },
-                //   ),
-                // ),
-                // SizedBox(
-                //   width: w,
-                //   height: h,
-                //   child: WebRTCPlayerControls(
-                //     code: WebrtcCodeType.h264,
-                //     controller: playerController15,
-                //     panelBuilder: (context, rect) {
-                //       return WebrtcPlayerPanel(
-                //         controller: playerController6,
-                //         texturePos: rect,
-                //         settings: PlayerSettings.live(),
-                //         builder: (context) => MultiRTCView(w, h),
-                //       );
-                //     },
-                //   ),
-                // ),
-                // SizedBox(
-                //   width: w,
-                //   height: h,
-                //   child: WebRTCPlayerControls(
-                //     code: WebrtcCodeType.h264,
-                //     controller: playerController16,
-                //     panelBuilder: (context, rect) {
-                //       return WebrtcPlayerPanel(
-                //         controller: playerController6,
-                //         texturePos: rect,
-                //         settings: PlayerSettings.live(),
-                //         builder: (context) => MultiRTCView(w, h),
-                //       );
-                //     },
+                // BlocProvider.value(
+                //   value: cubit6,
+                //   child: SizedBox(
+                //     width: w,
+                //     height: h,
+                //     child: WebrtcPlayerView(
+                //       settings: PlayerSettings.live(),
+                //     ),
                 //   ),
                 // ),
               ],

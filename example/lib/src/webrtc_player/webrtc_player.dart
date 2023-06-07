@@ -73,22 +73,28 @@ class WebRTCPlayer {
         final video = stream.getVideoTracks().firstObject;
 
         if (video != null) {
-          _getStatsTimer =
-              Timer.periodic(const Duration(milliseconds: 100), (timer) async {
-            final reports = await _pc?.getStats(video) ?? [];
-            if (reports.isNotEmpty) {
-              final bytesReceived = reports
-                      .firstObjectWhere((e) => e.type == 'inbound-rtp')
-                      ?.values['bytesReceived'] ??
-                  0;
-              debug(
-                  "=============== bytes received = $bytesReceived, ${timer.tick}");
-              if (bytesReceived > 0) {
-                _onReceiveFirstPacket?.call();
-                timer.cancel();
+          _getStatsTimer = Timer.periodic(
+            const Duration(milliseconds: 100),
+            (timer) async {
+              final reports = await _pc?.getStats(video) ?? [];
+
+              if (reports.isNotEmpty) {
+                final bytesReceived = reports
+                        .firstObjectWhere((e) => e.type == 'inbound-rtp')
+                        ?.values['bytesReceived'] ??
+                    0;
+                    
+                debug(
+                  '=============== bytes received = $bytesReceived, ${timer.tick}',
+                );
+
+                if (bytesReceived > 0) {
+                  _onReceiveFirstPacket?.call();
+                  timer.cancel();
+                }
               }
-            }
-          });
+            },
+          );
         }
       };
 
