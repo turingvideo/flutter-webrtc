@@ -37,7 +37,10 @@ class WebrtcPlayerStream {
     await _video?.initialize();
 
     _video?.onResize = () {};
+    
     _video?.onDidFirstRendered = () {
+      info('onDidFirstRendered');
+
       reconnectTimer?.cancel();
       reconnectTimer = null;
       reconnectTimes = 0;
@@ -80,7 +83,7 @@ class WebrtcPlayerStream {
       return;
     }
 
-    startReconnect();
+    // startReconnect();
   }
 
   void startReconnect() {

@@ -84,8 +84,8 @@ class WebRTCPlayer {
                         ?.values['bytesReceived'] ??
                     0;
 
-                debug(
-                  '=============== bytes received = $bytesReceived, ${timer.tick}',
+                info(
+                  'bytesReceived : $bytesReceived, ${timer.tick}',
                 );
 
                 if (bytesReceived > 0) {
@@ -173,7 +173,12 @@ class WebRTCPlayer {
 
       final uri = Uri.parse(webRTCUri.api);
 
-      debug('uri: ${uri.toString()}');;
+      debug(
+          'url: $url\nwebRTCUri api: ${webRTCUri.api}\nuri: ${uri.toString()}');
+
+      debug(
+        'api: ${webRTCUri.api}\nstreamurl: ${webRTCUri.streamUrl}\nsdp: \n$offer',
+      );
 
       final req = await client.postUrl(uri);
 
@@ -181,8 +186,6 @@ class WebRTCPlayer {
         'Content-Type',
         'application/json',
       );
-
-      debug('api: ${webRTCUri.api}\nstreamurl: ${webRTCUri.streamUrl}\nsdp: $offer');
 
       req.add(
         utf8.encode(
