@@ -111,7 +111,7 @@ class WebRTCPlayerController {
 
     if (step == WebrtcConnectionStep.peerConnectionFailed ||
         step == WebrtcConnectionStep.streamTimeout) {
-      resetDataSource();
+      // resetDataSource();
       return;
     }
 
@@ -138,7 +138,7 @@ class WebRTCPlayerController {
 
   /// state
   void setPlayerState(PlayerState state, TuringError error) {
-    debug("======= state = $state, error = ${error.em}, uuid = $uuid");
+    info('PlayerState: $state, error = ${error.em}, uuid = $uuid', tag: 'setPlayerState');
     playerState.value = state;
     this.error.value = error;
     state.isConnected ? _startTimer(state) : stopTimer();
@@ -146,6 +146,7 @@ class WebRTCPlayerController {
 
   /// data source
   void setDataSource({required String url, bool live = true, String? codec}) {
+    info('url: $url', tag: 'setDataSource');
     this.live.value = live;
     setPlayerState(PlayerState.connecting, TuringError.none);
     _streamer.autoPlay(url: url, codec: codec);

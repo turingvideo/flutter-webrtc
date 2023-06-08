@@ -46,6 +46,8 @@ class WebrtcPlayerStream {
     };
 
     player.onRemoteStream = (MediaStream stream) {
+      debug('onRemoteStream MediaStream: ${stream.toString()}');
+
       if (stream.getAudioTracks().isNotEmpty) {
         stream.getAudioTracks()[0].enabled = false;
       }
@@ -56,20 +58,23 @@ class WebrtcPlayerStream {
     };
 
     player.onConnectionState = (RTCPeerConnectionState s) {
+      info('$s', tag: 'onConnectionState');
+
       stateCallback?.call(s);
     };
 
     player.onReceiveFirstPacket = () {
       stepCallback?.call(WebrtcConnectionStep.receiveFirstPacket);
-      startReconnect();
+      // startReconnect();
     };
 
     try {
       String uri = url;
       if (codec != null) uri = '$url?codec=$codec';
+      debug('codec: $codec,\nurl: $url\n,uri: $uri');
       await player.play(uri);
       stepCallback?.call(WebrtcConnectionStep.peerConnectionSuccess);
-    } catch (_) {
+    } catch (e) {
       reconnectTimes++;
       stepCallback?.call(WebrtcConnectionStep.peerConnectionFailed);
       return;
@@ -80,16 +85,23 @@ class WebrtcPlayerStream {
 
   void startReconnect() {
     reconnectTimer?.cancel();
-    reconnectTimer = Timer(Duration(seconds: reconnectInterval), () {
-      reconnectTimes++;
-      if (reconnectTimes > maxReconnectTimes) {
-        stepCallback?.call(WebrtcConnectionStep.reconnectTooManyTimes);
-        reconnectTimes = 0;
-        player.dispose();
-      } else {
-        stepCallback?.call(WebrtcConnectionStep.streamTimeout);
-      }
-    });
+
+    reconnectTimer = Timer(
+      Duration(seconds: reconnectInterval),
+      () {
+        reconnectTimes++;
+
+        if (reconnectTimes > maxReconnectTimes) {
+          stepCallback?.call(WebrtcConnectionStep.reconnectTooManyTimes);
+
+          reconnectTimes = 0;
+
+          player.dispose();
+        } else {
+          stepCallback?.call(WebrtcConnectionStep.streamTimeout);
+        }
+      },
+    );
   }
 
   void setAudioOn() =>

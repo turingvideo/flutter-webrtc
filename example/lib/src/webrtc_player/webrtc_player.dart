@@ -83,7 +83,7 @@ class WebRTCPlayer {
                         .firstObjectWhere((e) => e.type == 'inbound-rtp')
                         ?.values['bytesReceived'] ??
                     0;
-                    
+
                 debug(
                   '=============== bytes received = $bytesReceived, ${timer.tick}',
                 );
@@ -133,7 +133,7 @@ class WebRTCPlayer {
       _onConnectionState?.call(
           webrtc.RTCPeerConnectionState.RTCPeerConnectionStateConnecting);
     } catch (e) {
-      // info("webrtc player connection error $e");
+      error('$e', tag: 'webrtc player connection error');
 
       _onConnectionState
           ?.call(webrtc.RTCPeerConnectionState.RTCPeerConnectionStateFailed);
@@ -145,17 +145,23 @@ class WebRTCPlayer {
 
   /// Handshake to exchange SDP, send offer and got answer.
   Future<webrtc.RTCSessionDescription> _handshake(
-      String url, String? offer) async {
+    String url,
+    String? offer,
+  ) async {
     // Setup the client for HTTP or HTTPS.
-    HttpClient client = HttpClient();
+    final client = HttpClient();
 
     try {
       // Allow self-sign certificate, see https://api.flutter.dev/flutter/dart-io/HttpClient/badCertificateCallback.html
-      client.badCertificateCallback =
-          (X509Certificate cert, String host, int port) => true;
+      client.badCertificateCallback = (
+        X509Certificate cert,
+        String host,
+        int port,
+      ) =>
+          true;
 
       // Parsing the WebRTC uri form url.
-      _WebRTCUri uri = _WebRTCUri.parse(url);
+      final webRTCUri = _WebRTCUri.parse(url);
 
       // Do signaling for WebRTC.
       // @see https://github.com/rtcdn/rtcdn-draft
@@ -164,27 +170,51 @@ class WebRTCPlayer {
       //    {api: "xxx", sdp: "offer", streamurl: "webrtc://d.ossrs.net:11985/live/livestream"}
       // Response:
       //    {code: 0, sdp: "answer", sessionid: "007r51l7:X2Lv"}
-      HttpClientRequest req = await client.postUrl(Uri.parse(uri.api));
-      req.headers.set('Content-Type', 'application/json');
-      req.add(utf8.encode(json.encode({
-        'api': uri.api,
-        'streamurl': uri.streamUrl,
-        'sdp': offer,
-      })));
+
+      final uri = Uri.parse(webRTCUri.api);
+
+      debug('uri: ${uri.toString()}');;
+
+      final req = await client.postUrl(uri);
+
+      req.headers.set(
+        'Content-Type',
+        'application/json',
+      );
+
+      debug('api: ${webRTCUri.api}\nstreamurl: ${webRTCUri.streamUrl}\nsdp: $offer');
+
+      req.add(
+        utf8.encode(
+          json.encode(
+            {
+              'api': webRTCUri.api,
+              'streamurl': webRTCUri.streamUrl,
+              'sdp': offer,
+            },
+          ),
+        ),
+      );
       // info('WebRTC request: ${uri.api} offer=${offer?.length}B');
 
-      HttpClientResponse res = await req.close();
-      String reply = await res.transform(utf8.decoder).join();
-      // info('WebRTC reply: ${reply.length}B, ${res.statusCode}');
+      final res = await req.close();
 
-      Map<String, dynamic> o = json.decode(reply);
+      final stringData = await res.transform(utf8.decoder).join();
+
+      debug('stringData: $stringData');
+
+      Map<String, dynamic> o = json.decode(stringData);
+
       // info('WebRTC reply: ${o.toString()}');
+
       if (!o.containsKey('code') || !o.containsKey('sdp') || o['code'] != 0) {
-        throw Future.error(reply);
+        throw Future.error(stringData);
       }
 
       return Future.value(webrtc.RTCSessionDescription(o['sdp'], 'answer'));
-    } catch (error) {
+    } catch (err) {
+      error('$err', tag: '_handshake catch');
+
       rethrow;
     } finally {
       client.close();
