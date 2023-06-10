@@ -2,6 +2,9 @@
 <Workspace
    version = "1.0">
    <FileRef
+      location = "group:../../../build_rtc/src/out/Debug/ios-arm64-simulator/all.xcodeproj">
+   </FileRef>
+   <FileRef
       location = "group:Runner.xcodeproj">
    </FileRef>
    <FileRef
