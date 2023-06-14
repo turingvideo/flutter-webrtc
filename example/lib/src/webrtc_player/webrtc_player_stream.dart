@@ -37,7 +37,7 @@ class WebrtcPlayerStream {
     await _video?.initialize();
 
     _video?.onResize = () {};
-    
+
     _video?.onDidFirstRendered = () {
       info('onDidFirstRendered');
 
@@ -75,7 +75,10 @@ class WebrtcPlayerStream {
       String uri = url;
       if (codec != null) uri = '$url?codec=$codec';
       debug('codec: $codec,\nurl: $url\n,uri: $uri');
+
+      // if (url.isNotEmpty) {
       await player.play(uri);
+      // }
       stepCallback?.call(WebrtcConnectionStep.peerConnectionSuccess);
     } catch (e) {
       reconnectTimes++;

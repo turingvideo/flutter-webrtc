@@ -1,10 +1,15 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
+import 'dart:ffi';
 import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter_webrtc/flutter_webrtc.dart' as webrtc;
+import 'package:rxdart/rxdart.dart';
 import 'package:turing_mobile/turing_foundation.dart';
+
+final client = HttpClient()..badCertificateCallback = (_, __, ___) => true;
 
 class WebRTCPlayer {
   Function(webrtc.MediaStream stream)? _onRemoteStream;
@@ -36,14 +41,17 @@ class WebRTCPlayer {
   /// Start play a url.
   /// [url] must a path parsed by [WebRTCUri.parse] in https://github.com/rtcdn/rtcdn-draft
   Future<void> play(String url) async {
-    _getStatsTimer?.cancel();
-    _getStatsTimer = null;
+    final urls = url.split('?');
+
+    final testUrl = urls.first;
 
     try {
+      _getStatsTimer?.cancel();
+      _getStatsTimer = null;
+
       await _pc?.close();
       _pc = null;
 
-      // Create the peer connection.
       _pc = await webrtc.createPeerConnection({
         // AddTransceiver is only available with Unified Plan SdpSemantics
         'sdpSemantics': "unified-plan"
@@ -66,7 +74,6 @@ class WebRTCPlayer {
 
       _pc!.onIceConnectionState = (webrtc.RTCIceConnectionState state) {};
 
-      // Setup the peer connection.
       _pc!.onAddStream = (webrtc.MediaStream stream) {
         _onRemoteStream?.call(stream);
 
@@ -84,9 +91,9 @@ class WebRTCPlayer {
                         ?.values['bytesReceived'] ??
                     0;
 
-                info(
-                  'bytesReceived : $bytesReceived, ${timer.tick}',
-                );
+                // info(
+                //   'bytesReceived : $bytesReceived, ${timer.tick}',
+                // );
 
                 if (bytesReceived > 0) {
                   _onReceiveFirstPacket?.call();
@@ -100,6 +107,13 @@ class WebRTCPlayer {
 
       _pc!.onAddTrack =
           (webrtc.MediaStream stream, webrtc.MediaStreamTrack track) {};
+      // Create the peer connection.
+
+      // Setup the peer connection.
+
+      // info('WebRTC: Setup PC done, A|V RecvOnly');
+
+      // Start SDP handshake.
 
       _pc!.addTransceiver(
         kind: webrtc.RTCRtpMediaType.RTCRtpMediaTypeAudio,
@@ -113,25 +127,36 @@ class WebRTCPlayer {
           direction: webrtc.TransceiverDirection.RecvOnly,
         ),
       );
-      // info('WebRTC: Setup PC done, A|V RecvOnly');
 
-      // Start SDP handshake.
-      webrtc.RTCSessionDescription offer = await _pc!.createOffer({
+      final offer = await _pc!.createOffer({
         'mandatory': {'OfferToReceiveAudio': true, 'OfferToReceiveVideo': true},
       });
-      await _pc!.setLocalDescription(offer);
-      // info(
-      //     'WebRTC: createOffer, ${offer.type} is ${offer.sdp?.replaceAll('\n', '\\n').replaceAll('\r', '\\r')}');
 
-      webrtc.RTCSessionDescription answer = await _handshake(url, offer.sdp);
+      if (testUrl.isNotEmpty) {
+        await _pc!.setLocalDescription(offer);
+        // info(
+        //     'WebRTC: createOffer, ${offer.type} is ${offer.sdp?.replaceAll('\n', '\\n').replaceAll('\r', '\\r')}');
 
-      // info(
-      //     'WebRTC: got answer ${answer.type} is ${answer.sdp?.replaceAll('\n', '\\n').replaceAll('\r', '\\r')}');
+        HttpClass.instance.desMapChanged.listen((value) async {
+          final des = value[url];
 
-      await _pc!.setRemoteDescription(answer);
-      // info("set remote description success");
-      _onConnectionState?.call(
-          webrtc.RTCPeerConnectionState.RTCPeerConnectionStateConnecting);
+          if (des == null) {
+            info('RTCSessionDescription null');
+          } else {
+// info('WebRTC: got answer ${answer.type} is ${answer.sdp?.replaceAll('\n', '\\n').replaceAll('\r', '\\r')}');
+            info('des: $des');
+            await _pc!.setRemoteDescription(des);
+
+            // info("set remote description success");
+
+            _onConnectionState?.call(
+              webrtc.RTCPeerConnectionState.RTCPeerConnectionStateConnecting,
+            );
+          }
+        });
+
+        HttpClass.instance.add(url, offer.sdp);
+      }
     } catch (e) {
       error('$e', tag: 'webrtc player connection error');
 
@@ -144,85 +169,78 @@ class WebRTCPlayer {
   }
 
   /// Handshake to exchange SDP, send offer and got answer.
-  Future<webrtc.RTCSessionDescription> _handshake(
-    String url,
-    String? offer,
-  ) async {
-    // Setup the client for HTTP or HTTPS.
-    final client = HttpClient();
+  // Future<webrtc.RTCSessionDescription> _handshake(
+  //   String url,
+  //   String? offer,
+  // ) async {
+  //   try {
+  //     // Allow self-sign certificate, see https://api.flutter.dev/flutter/dart-io/HttpClient/badCertificateCallback.html
 
-    try {
-      // Allow self-sign certificate, see https://api.flutter.dev/flutter/dart-io/HttpClient/badCertificateCallback.html
-      client.badCertificateCallback = (
-        X509Certificate cert,
-        String host,
-        int port,
-      ) =>
-          true;
+  //     debug('url: $url');
 
-      // Parsing the WebRTC uri form url.
-      final webRTCUri = _WebRTCUri.parse(url);
+  //     // Parsing the WebRTC uri form url.
+  //     final webRTCUri = _WebRTCUri.parse(url);
 
-      // Do signaling for WebRTC.
-      // @see https://github.com/rtcdn/rtcdn-draft
-      //
-      // POST http://d.ossrs.net:11985/rtc/v1/play/
-      //    {api: "xxx", sdp: "offer", streamurl: "webrtc://d.ossrs.net:11985/live/livestream"}
-      // Response:
-      //    {code: 0, sdp: "answer", sessionid: "007r51l7:X2Lv"}
+  //     debug(
+  //       'webRTCUri api: ${webRTCUri.api}\nwebRTCUri streamurl: ${webRTCUri.streamUrl}',
+  //     );
 
-      final uri = Uri.parse(webRTCUri.api);
+  //     // Do signaling for WebRTC.
+  //     // @see https://github.com/rtcdn/rtcdn-draft
+  //     //
+  //     // POST http://d.ossrs.net:11985/rtc/v1/play/
+  //     //    {api: "xxx", sdp: "offer", streamurl: "webrtc://d.ossrs.net:11985/live/livestream"}
+  //     // Response:
+  //     //    {code: 0, sdp: "answer", sessionid: "007r51l7:X2Lv"}
 
-      debug(
-          'url: $url\nwebRTCUri api: ${webRTCUri.api}\nuri: ${uri.toString()}');
+  //     final uri = Uri.parse(webRTCUri.api);
 
-      debug(
-        'api: ${webRTCUri.api}\nstreamurl: ${webRTCUri.streamUrl}\nsdp: \n$offer',
-      );
+  //     debug('postUrl uri: $uri');
 
-      final req = await client.postUrl(uri);
+  //     debug('client Object: ${client.hashCode}');
 
-      req.headers.set(
-        'Content-Type',
-        'application/json',
-      );
+  //     final req = await client.postUrl(uri);
 
-      req.add(
-        utf8.encode(
-          json.encode(
-            {
-              'api': webRTCUri.api,
-              'streamurl': webRTCUri.streamUrl,
-              'sdp': offer,
-            },
-          ),
-        ),
-      );
-      // info('WebRTC request: ${uri.api} offer=${offer?.length}B');
+  //     req.headers.set(
+  //       'Content-Type',
+  //       'application/json',
+  //     );
 
-      final res = await req.close();
+  //     req.add(
+  //       utf8.encode(
+  //         json.encode(
+  //           {
+  //             'api': webRTCUri.api,
+  //             'streamurl': webRTCUri.streamUrl,
+  //             'sdp': offer,
+  //           },
+  //         ),
+  //       ),
+  //     );
 
-      final stringData = await res.transform(utf8.decoder).join();
+  //     final res = await req.close();
 
-      debug('stringData: $stringData');
+  //     final stringData = await res.transform(utf8.decoder).join();
 
-      Map<String, dynamic> o = json.decode(stringData);
+  //     debug('stringData: $stringData');
 
-      // info('WebRTC reply: ${o.toString()}');
+  //     Map<String, dynamic> o = json.decode(stringData);
 
-      if (!o.containsKey('code') || !o.containsKey('sdp') || o['code'] != 0) {
-        throw Future.error(stringData);
-      }
+  //     // info('WebRTC reply: ${o.toString()}');
 
-      return Future.value(webrtc.RTCSessionDescription(o['sdp'], 'answer'));
-    } catch (err) {
-      error('$err', tag: '_handshake catch');
+  //     if (!o.containsKey('code') || !o.containsKey('sdp') || o['code'] != 0) {
+  //       throw Future.error(stringData);
+  //     }
 
-      rethrow;
-    } finally {
-      client.close();
-    }
-  }
+  //     return Future.value(webrtc.RTCSessionDescription(o['sdp'], 'answer'));
+  //   } catch (err) {
+  //     error('$err', tag: '_handshake catch');
+
+  //     rethrow;
+  //   } finally {
+  //     client.close();
+  //   }
+  // }
 
   /// Dispose the player.
   void dispose() {
@@ -281,8 +299,138 @@ class _WebRTCUri {
       apiUrl += '?${apiParams.join('&')}';
     }
 
-    _WebRTCUri r = _WebRTCUri(api: apiUrl, streamUrl: url);
-    verbose('Url:$url\napi:${r.api}\nstream:${r.streamUrl}');
+    final r = _WebRTCUri(api: apiUrl, streamUrl: url);
+
     return r;
+  }
+}
+
+class HttpClass {
+  HttpClass._() {
+    _subscription = queueChanged.listen((_) {
+      executeQueue();
+    });
+  }
+
+  StreamSubscription? _subscription;
+
+  static final instance = HttpClass._();
+
+  final queue = <Map<String, String?>>[];
+
+  final queueChanged = PublishSubject<void>();
+
+  bool isExecute = false;
+
+  final desMap = <String, webrtc.RTCSessionDescription?>{};
+
+  final desMapChanged =
+      PublishSubject<Map<String, webrtc.RTCSessionDescription?>>();
+
+  void add(String url, String? offer) async {
+    queue.add({url: offer});
+
+    queueChanged.add(null);
+  }
+
+  Future<webrtc.RTCSessionDescription?> executeQueue() async {
+    if (queue.isEmpty || isExecute == true) {
+      return Future.value(null);
+    }
+
+    isExecute = true;
+
+    final url = queue.first.keys.first;
+    final offer = queue.first.values.first;
+
+    webrtc.RTCSessionDescription? des;
+
+    try {
+      des = await _handshake(url, offer);
+    } catch (e) {
+      error('_handshake cache: $e');
+    }
+
+    desMap.addAll({url: des});
+
+    desMapChanged.add({url: des});
+
+    isExecute = false;
+
+    queue.removeAt(0);
+
+    queueChanged.add(null);
+
+    return des;
+  }
+
+  Future<webrtc.RTCSessionDescription> _handshake(
+    String url,
+    String? offer,
+  ) async {
+    try {
+      // Allow self-sign certificate, see https://api.flutter.dev/flutter/dart-io/HttpClient/badCertificateCallback.html
+
+      debug('url: $url', tag: 'in _handshake');
+
+      // Parsing the WebRTC uri form url.
+      final webRTCUri = _WebRTCUri.parse(url);
+
+      debug(
+        'webRTCUri api: ${webRTCUri.api}\nwebRTCUri streamurl: ${webRTCUri.streamUrl}',
+      );
+
+      // Do signaling for WebRTC.
+      // @see https://github.com/rtcdn/rtcdn-draft
+      //
+      // POST http://d.ossrs.net:11985/rtc/v1/play/
+      //    {api: "xxx", sdp: "offer", streamurl: "webrtc://d.ossrs.net:11985/live/livestream"}
+      // Response:
+      //    {code: 0, sdp: "answer", sessionid: "007r51l7:X2Lv"}
+
+      final uri = Uri.parse(webRTCUri.api);
+
+      debug('postUrl uri: $uri');
+
+      debug('client Object: ${client.hashCode}');
+
+      final req = await client.postUrl(uri);
+
+      req.headers.set(
+        'Content-Type',
+        'application/json',
+      );
+
+      req.add(
+        utf8.encode(
+          json.encode(
+            {
+              'api': webRTCUri.api,
+              'streamurl': webRTCUri.streamUrl,
+              'sdp': offer,
+            },
+          ),
+        ),
+      );
+
+      final res = await req.close();
+
+      final stringData = await res.transform(utf8.decoder).join();
+
+      debug('stringData: $stringData');
+
+      Map<String, dynamic> o = json.decode(stringData);
+
+      // info('WebRTC reply: ${o.toString()}');
+
+      if (!o.containsKey('code') || !o.containsKey('sdp') || o['code'] != 0) {
+        throw Future.error(stringData);
+      }
+
+      return Future.value(webrtc.RTCSessionDescription(o['sdp'], 'answer'));
+    } catch (err) {
+      error('$err', tag: '_handshake catch');
+      rethrow;
+    } finally {}
   }
 }

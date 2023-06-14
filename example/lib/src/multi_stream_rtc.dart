@@ -30,21 +30,21 @@ const streamUrls = <String>[
   // 'webrtc://dev-stream-go.turingvideo.com/live/8707/0216dda1763af9cfc2dc17ca4bbe8539',
 
   // dog food
-  'webrtc://test-srs-1.turingvideo.com/live/20945/a4553662cf30542c761cd6440b9f37c4',
-  // 'webrtc://test-srs-1.turingvideo.com/live/20891/9f2f289f7d366f7408c539444180418b',
-  // 'webrtc://test-srs-1.turingvideo.com/live/20892/d4f9a1da2a88fb7ed895f3b983a59003',
   // 'webrtc://test-srs-1.turingvideo.com/live/20948/7a6e3120ab1c5a8f630a82b033dd37fe',
-  // 'webrtc://test-srs-1.turingvideo.com/live/20952/3e81e8b48051a50efcc0486400a616f4',
+  // 'webrtc://test-srs-1.turingvideo.com/live/20891/9f2f289f7d366f7408c539444180418b',
   // 'webrtc://test-srs-1.turingvideo.com/live/21065/e30682d57badbd061c375a484998b0c2',
+  // 'webrtc://test-srs-1.turingvideo.com/live/20945/a4553662cf30542c761cd6440b9f37c4',
+  // 'webrtc://test-srs-1.turingvideo.com/live/20952/3e81e8b48051a50efcc0486400a616f4',
+  // 'webrtc://test-srs-1.turingvideo.com/live/20892/d4f9a1da2a88fb7ed895f3b983a59003',
 
   // sale demo
-  // 'webrtc://srs-2.turingvideo.com/live/108273/17493d8ad01c1585d877552f03c1b914',
-  // 'webrtc://srs-2.turingvideo.com/live/61037/4f27082cab1c5da7812429122b832327',
-  // 'webrtc://srs-2.turingvideo.com/live/60918/ba296f3a51c158ad6a79db905c52c8a7',
-  // 'webrtc://srs.turingvideo.com/live/60914/59c9a361f5c301e4d4ca56ac1aad85d1',
-  // 'webrtc://srs-2.turingvideo.com/live/74283/090cd7b395ef88ffa4e0d08d0cd483c0',
-  // 'webrtc://srs-2.turingvideo.com/live/64637/af9225991f72e9c23c0775b27805e731',
-  // 'webrtc://srs-2.turingvideo.com/live/85381/90d397cbcbd7a34bd181d88ee4aedc41',
+  'webrtc://srs-1.turingvideo.com/live/61037/4f27082cab1c5da7812429122b832327',
+  'webrtc://srs-1.turingvideo.com/live/85381/90d397cbcbd7a34bd181d88ee4aedc41',
+  'webrtc://srs-1.turingvideo.com/live/108273/17493d8ad01c1585d877552f03c1b914',
+  'webrtc://srs-1.turingvideo.com/live/60918/ba296f3a51c158ad6a79db905c52c8a7',
+  'webrtc://srs-1.turingvideo.com/live/64637/af9225991f72e9c23c0775b27805e731',
+  'webrtc://srs-1.turingvideo.com/live/60914/59c9a361f5c301e4d4ca56ac1aad85d1',
+// 'webrtc://srs-1.turingvideo.com/live/74283/090cd7b395ef88ffa4e0d08d0cd483c0',
 ];
 
 class MultiRTCStream extends StatefulWidget {
@@ -56,11 +56,11 @@ class MultiRTCStream extends StatefulWidget {
 
 class _MultiRTCStreamState extends State<MultiRTCStream> {
   final cubit1 = WebrtcPlayerCubit(camera: NestCamera(1, '1'));
-  // final cubit2 = WebrtcPlayerCubit(camera: NestCamera(2, '2'));
-  // final cubit3 = WebrtcPlayerCubit(camera: NestCamera(3, '3'));
-  // final cubit4 = WebrtcPlayerCubit(camera: NestCamera(4, '4'));
-  // final cubit5 = WebrtcPlayerCubit(camera: NestCamera(5, '5'));
-  // final cubit6 = WebrtcPlayerCubit(camera: NestCamera(6, '6'));
+  final cubit2 = WebrtcPlayerCubit(camera: NestCamera(2, '2'));
+  final cubit3 = WebrtcPlayerCubit(camera: NestCamera(3, '3'));
+  final cubit4 = WebrtcPlayerCubit(camera: NestCamera(4, '4'));
+  final cubit5 = WebrtcPlayerCubit(camera: NestCamera(5, '5'));
+  final cubit6 = WebrtcPlayerCubit(camera: NestCamera(6, '6'));
   // final cubit7 = WebrtcPlayerCubit(camera: NestCamera(7, '7'));
 
   void play() {
@@ -72,22 +72,32 @@ class _MultiRTCStreamState extends State<MultiRTCStream> {
     //   url: streamUrls[1],
     //   codec: StreamEncode.h264.label,
     // );
-    // cubit3.playerController.setDataSource(
-    //   url: streamUrls[2],
-    //   codec: StreamEncode.h264.label,
-    // );
-    // cubit4.playerController.setDataSource(
-    //   url: streamUrls[3],
-    //   codec: StreamEncode.h264.label,
-    // );
-    // cubit5.playerController.setDataSource(
-    //   url: streamUrls[4],
-    //   codec: StreamEncode.h264.label,
-    // );
+    cubit2.playerController.setDataSource(
+      url: '',
+      codec: StreamEncode.h264.label,
+    );
+    cubit3.playerController.setDataSource(
+      url: streamUrls[2],
+      codec: StreamEncode.h264.label,
+    );
+    cubit4.playerController.setDataSource(
+      url: streamUrls[3],
+      codec: StreamEncode.h264.label,
+    );
+    cubit5.playerController.setDataSource(
+      url: streamUrls[4],
+      codec: StreamEncode.h264.label,
+    );
+    cubit6.playerController.setDataSource(
+      url: streamUrls[5],
+      codec: StreamEncode.h264.label,
+    );
+
     // cubit6.playerController.setDataSource(
-    //   url: streamUrls[5],
+    //   url: '',
     //   codec: StreamEncode.h264.label,
     // );
+
     // cubit7.playerController.setDataSource(
     //   url: streamUrls[6],
     //   codec: StreamEncode.h264.label,
@@ -97,11 +107,12 @@ class _MultiRTCStreamState extends State<MultiRTCStream> {
   @override
   void dispose() {
     cubit1.close();
-    // cubit2.close();
-    // cubit3.close();
-    // cubit4.close();
-    // cubit5.close();
-    // cubit6.close();
+    cubit2.close();
+    cubit3.close();
+    cubit4.close();
+    cubit5.close();
+    cubit6.close();
+
     // cubit7.close();
 
     super.dispose();
@@ -147,56 +158,56 @@ class _MultiRTCStreamState extends State<MultiRTCStream> {
                     ),
                   ),
                 ),
-                // BlocProvider.value(
-                //   value: cubit2,
-                //   child: SizedBox(
-                //     width: w,
-                //     height: h,
-                //     child: WebrtcPlayerView(
-                //       settings: PlayerSettings.live(),
-                //     ),
-                //   ),
-                // ),
-                // BlocProvider.value(
-                //   value: cubit3,
-                //   child: SizedBox(
-                //     width: w,
-                //     height: h,
-                //     child: WebrtcPlayerView(
-                //       settings: PlayerSettings.live(),
-                //     ),
-                //   ),
-                // ),
-                // BlocProvider.value(
-                //   value: cubit4,
-                //   child: SizedBox(
-                //     width: w,
-                //     height: h,
-                //     child: WebrtcPlayerView(
-                //       settings: PlayerSettings.live(),
-                //     ),
-                //   ),
-                // ),
-                // BlocProvider.value(
-                //   value: cubit5,
-                //   child: SizedBox(
-                //     width: w,
-                //     height: h,
-                //     child: WebrtcPlayerView(
-                //       settings: PlayerSettings.live(),
-                //     ),
-                //   ),
-                // ),
-                // BlocProvider.value(
-                //   value: cubit6,
-                //   child: SizedBox(
-                //     width: w,
-                //     height: h,
-                //     child: WebrtcPlayerView(
-                //       settings: PlayerSettings.live(),
-                //     ),
-                //   ),
-                // ),
+                BlocProvider.value(
+                  value: cubit2,
+                  child: SizedBox(
+                    width: w,
+                    height: h,
+                    child: WebrtcPlayerView(
+                      settings: PlayerSettings.live(),
+                    ),
+                  ),
+                ),
+                BlocProvider.value(
+                  value: cubit3,
+                  child: SizedBox(
+                    width: w,
+                    height: h,
+                    child: WebrtcPlayerView(
+                      settings: PlayerSettings.live(),
+                    ),
+                  ),
+                ),
+                BlocProvider.value(
+                  value: cubit4,
+                  child: SizedBox(
+                    width: w,
+                    height: h,
+                    child: WebrtcPlayerView(
+                      settings: PlayerSettings.live(),
+                    ),
+                  ),
+                ),
+                BlocProvider.value(
+                  value: cubit5,
+                  child: SizedBox(
+                    width: w,
+                    height: h,
+                    child: WebrtcPlayerView(
+                      settings: PlayerSettings.live(),
+                    ),
+                  ),
+                ),
+                BlocProvider.value(
+                  value: cubit6,
+                  child: SizedBox(
+                    width: w,
+                    height: h,
+                    child: WebrtcPlayerView(
+                      settings: PlayerSettings.live(),
+                    ),
+                  ),
+                ),
                 // BlocProvider.value(
                 //   value: cubit7,
                 //   child: SizedBox(
