@@ -132,8 +132,9 @@ class WebRTCPlayer {
         'mandatory': {'OfferToReceiveAudio': true, 'OfferToReceiveVideo': true},
       });
 
+      await _pc!.setLocalDescription(offer);
+
       if (testUrl.isNotEmpty) {
-        await _pc!.setLocalDescription(offer);
         // info(
         //     'WebRTC: createOffer, ${offer.type} is ${offer.sdp?.replaceAll('\n', '\\n').replaceAll('\r', '\\r')}');
 
