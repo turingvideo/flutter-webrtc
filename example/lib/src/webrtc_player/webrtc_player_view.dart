@@ -11,7 +11,7 @@ import 'package:flutter_webrtc_example/src/custom_error/custom_error.dart';
 
 import 'package:flutter_webrtc_example/src/player_panel/player_settings.dart';
 import 'package:flutter_webrtc_example/src/player_panel/player_state.dart';
-import 'package:flutter_webrtc_example/src/utils/orientation_helper.dart';
+
 import 'package:flutter_webrtc_example/src/webrtc_player/webrtc_player_panel.dart';
 
 import 'package:turing_mobile/turing_mixin.dart';
@@ -274,7 +274,7 @@ class _FullscreenViewState extends State<_FullscreenView>
     cubit.controller.addListener(_onUpdatePlayerController);
     playerController.orientation.addListener(_onFullscreenChanged);
     playerController.playerState.addListener(_onPlayerStateChanged);
-    OrientationHelper.forceOrientation(playerController.orientation.value);
+
   }
 
   @override
@@ -304,7 +304,7 @@ class _FullscreenViewState extends State<_FullscreenView>
   void _onFullscreenChanged() {
     if (!playerController.isFullscreen) {
       Navigator.of(context).pop();
-      OrientationHelper.forceOrientation(DeviceOrientation.portraitUp);
+
     }
   }
 
