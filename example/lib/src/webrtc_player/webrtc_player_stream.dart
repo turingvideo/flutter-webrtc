@@ -33,6 +33,8 @@ class WebrtcPlayerStream {
   static int maxReconnectTimes = 5;
 
   void autoPlay({required String url, String? codec}) async {
+    debug('autoPlay', tag: 'test_time');
+
     _video = RTCVideoRenderer();
     await _video?.initialize();
 
@@ -44,6 +46,8 @@ class WebrtcPlayerStream {
       reconnectTimer?.cancel();
       reconnectTimer = null;
       reconnectTimes = 0;
+
+      debug('onDidFirstRendered', tag: 'test_time');
 
       stepCallback?.call(WebrtcConnectionStep.receiveFirstRender);
     };
