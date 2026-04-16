@@ -206,7 +206,10 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
 
     dataPacketCryptor = new FlutterDataPacketCryptor(frameCryptor);
 
-    AudioAttributes audioAttributes = null;
+    AudioAttributes audioAttributes = new AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_MEDIA)
+            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+            .build();
     if (androidAudioConfiguration != null) {
       Integer usageType = AudioUtils.getAudioAttributesUsageTypeForString(
               androidAudioConfiguration.getString("androidAudioAttributesUsageType"));

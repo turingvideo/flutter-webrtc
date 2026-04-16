@@ -500,9 +500,6 @@ class PeerConnectionObserver implements PeerConnection.Observer, EventChannel.St
       params.putMap("track", trackInfo.toMap());
       sendEvent(params);
 
-      if ("audio".equals(track.kind())) {
-        AudioSwitchManager.instance.start();
-      }
     }
 
     // For unified-plan
