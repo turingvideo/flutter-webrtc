@@ -381,7 +381,6 @@ public class GetUserMediaImpl {
     }
 
     private ConstraintsMap getUserAudio(ConstraintsMap constraints, MediaStream stream) {
-        AudioSwitchManager.instance.start();
         MediaConstraints audioConstraints = new MediaConstraints();
         String deviceId = null;
         if (constraints.getType("audio") == ObjectType.Boolean) {
