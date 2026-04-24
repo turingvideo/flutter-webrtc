@@ -25,7 +25,8 @@
         config.categoryOptions =
             AVAudioSessionCategoryOptionAllowBluetooth |
             AVAudioSessionCategoryOptionAllowBluetoothA2DP |
-            AVAudioSessionCategoryOptionAllowAirPlay;
+            AVAudioSessionCategoryOptionAllowAirPlay |
+            AVAudioSessionCategoryOptionMixWithOthers;
         success = [session setCategory:config.category withOptions:config.categoryOptions error:&error];
         if (!success)
           NSLog(@"ensureAudioSessionWithRecording[true]: setCategory failed due to: %@", error);
@@ -83,7 +84,8 @@
     BOOL success = [session setCategory:config.category
                             withOptions:AVAudioSessionCategoryOptionAllowAirPlay |
                                         AVAudioSessionCategoryOptionAllowBluetoothA2DP |
-                                        AVAudioSessionCategoryOptionAllowBluetooth
+                                        AVAudioSessionCategoryOptionAllowBluetooth |
+                                        AVAudioSessionCategoryOptionMixWithOthers
                                   error:&error];
 
     success = [session.session overrideOutputAudioPort:kAudioSessionOverrideAudioRoute_None
@@ -96,7 +98,8 @@
                             withOptions:AVAudioSessionCategoryOptionDefaultToSpeaker |
                                         AVAudioSessionCategoryOptionAllowAirPlay |
                                         AVAudioSessionCategoryOptionAllowBluetoothA2DP |
-                                        AVAudioSessionCategoryOptionAllowBluetooth
+                                        AVAudioSessionCategoryOptionAllowBluetooth |
+                                        AVAudioSessionCategoryOptionMixWithOthers
                                   error:&error];
 
     success = [session overrideOutputAudioPort:AVAudioSessionPortOverrideSpeaker
@@ -117,7 +120,8 @@
                           withOptions:AVAudioSessionCategoryOptionAllowAirPlay |
                                       AVAudioSessionCategoryOptionAllowBluetoothA2DP |
                                       AVAudioSessionCategoryOptionAllowBluetooth |
-                                      AVAudioSessionCategoryOptionDefaultToSpeaker
+                                      AVAudioSessionCategoryOptionDefaultToSpeaker |
+                                      AVAudioSessionCategoryOptionMixWithOthers
                                 error:&error];
 
   success = [session overrideOutputAudioPort:kAudioSessionOverrideAudioRoute_None
