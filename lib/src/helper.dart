@@ -192,4 +192,50 @@ class Helper {
           'requestCapturePermission only support for Android/macOS');
     }
   }
+
+  /// Patch an offer / answer SDP to enable NACK retransmission for audio
+  /// codecs. Native WebRTC ships audio codecs without an `a=rtcp-fb:<pt> nack`
+  /// line by default — video has it, audio doesn't — so the receiver never
+  /// requests retransmissions and the sender never stores packets for replay.
+  /// On lossy links (mobile / Wi-Fi to IoT) this hurts G.711 in particular,
+  /// since it has no inband FEC to fall back on.
+  ///
+  /// Call this on the SDP returned by [RTCPeerConnection.createOffer] /
+  /// [RTCPeerConnection.createAnswer] before passing it to
+  /// [RTCPeerConnection.setLocalDescription]. Both endpoints must do this —
+  /// NACK is negotiated symmetrically and unilateral additions get stripped.
+  ///
+  /// ```dart
+  /// final offer = await pc.createOffer();
+  /// final patchedOffer = Helper.enableAudioNack(offer);
+  /// await pc.setLocalDescription(patchedOffer);
+  /// ```
+  static RTCSessionDescription enableAudioNack(
+    RTCSessionDescription desc, {
+    List<String> codecs = const ['PCMU', 'PCMA', 'opus'],
+  }) {
+    final sdp = desc.sdp;
+    if (sdp == null || sdp.isEmpty || codecs.isEmpty) {
+      return desc;
+    }
+    final codecAlt = codecs.map(RegExp.escape).join('|');
+    final rtpmap = RegExp(
+      'a=rtpmap:(\\d+) ($codecAlt)/[^\\r\\n]+\\r?\\n',
+      caseSensitive: false,
+    );
+    final patched = sdp.replaceAllMapped(rtpmap, (m) {
+      final pt = m.group(1);
+      final line = m.group(0)!;
+      // Skip if this payload type already advertises nack.
+      final existing = RegExp(
+        'a=rtcp-fb:$pt nack(\\s|\\r|\\n|\$)',
+        caseSensitive: false,
+      );
+      if (existing.hasMatch(sdp)) {
+        return line;
+      }
+      return '${line}a=rtcp-fb:$pt nack\r\n';
+    });
+    return RTCSessionDescription(patched, desc.type);
+  }
 }
