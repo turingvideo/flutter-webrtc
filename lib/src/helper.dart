@@ -228,13 +228,14 @@ class Helper {
       final line = m.group(0)!;
       // Skip if this payload type already advertises nack.
       final existing = RegExp(
-        'a=rtcp-fb:$pt nack(\\s|\\r|\\n|\$)',
+        'a=rtcp-fb:$pt nack(\\s|\$)',
         caseSensitive: false,
       );
       if (existing.hasMatch(sdp)) {
         return line;
       }
-      return '${line}a=rtcp-fb:$pt nack\r\n';
+      final lineEnding = line.endsWith('\r\n') ? '\r\n' : '\n';
+      return '${line}a=rtcp-fb:$pt nack$lineEnding';
     });
     return RTCSessionDescription(patched, desc.type);
   }
