@@ -7,6 +7,7 @@ import 'package:webrtc_interface/webrtc_interface.dart';
 
 import '../helper.dart';
 import '../video_renderer_extension.dart' show AudioControl;
+import 'rtc_video_dewarp.dart';
 import 'utils.dart';
 
 class RTCVideoRenderer extends ValueNotifier<RTCVideoValue>
@@ -91,6 +92,39 @@ class RTCVideoRenderer extends ValueNotifier<RTCVideoValue>
     } on PlatformException catch (e) {
       throw 'Got exception for RTCVideoRenderer::setSrcObject: textureId $oldTextureId [disposed: $_disposed] with stream ${stream?.id}, error: ${e.message}';
     }
+  }
+
+  /// Configure (or clear, by passing `null`) real-time fisheye lens
+  /// dewarping for this renderer.
+  ///
+  /// This only swaps the local GPU rendering path (which shader/kernel
+  /// draws the already-decoded frame) -- it never touches [srcObject], the
+  /// underlying [MediaStreamTrack], or the peer connection. The video
+  /// stream keeps playing uninterrupted; only the on-screen pixels change,
+  /// from the raw frame to the dewarped composite (or back). Call this on
+  /// the same renderer instance that already has the stream attached --
+  /// don't create a second renderer/`RTCVideoView` for the dewarped view.
+  ///
+  /// Native-only (Android/iOS/macOS): a no-op everywhere else, since the
+  /// dewarp is a GPU post-process applied to already-decoded frames on the
+  /// native side.
+  Future<void> setDewarpConfig(FisheyeDewarpConfig? config) async {
+    if (_disposed) {
+      throw 'Can\'t set dewarp config: The RTCVideoRenderer is disposed';
+    }
+    if (_textureId == null) {
+      throw 'Call initialize before setting the dewarp config';
+    }
+    if (!(WebRTC.platformIsAndroid ||
+        WebRTC.platformIsIOS ||
+        WebRTC.platformIsMacOS)) {
+      return;
+    }
+    await WebRTC.invokeMethod('videoRendererSetDewarpConfig', <String, dynamic>{
+      'textureId': _textureId,
+      'enabled': config != null,
+      if (config != null) ...config.toMap(),
+    });
   }
 
   @override
