@@ -9,12 +9,26 @@
 #import <objc/runtime.h>
 
 #import "FlutterWebRTCPlugin.h"
+#import "RTCDewarpProcessor.h"
 #import <os/lock.h>
 
 @implementation FlutterRTCVideoRenderer {
+  // Size of _pixelBufferRef: the raw decoded frame size when dewarp is
+  // off, or the dewarped composite canvas size when it's on -- i.e.
+  // whatever's actually displayed. Reported to Dart in place of the raw
+  // decoder frame size (see -renderFrame:) so RTCVideoView's
+  // aspect-ratio-driven layout stays correct.
   CGSize _frameSize;
   CGSize _renderSize;
   CVPixelBufferRef _pixelBufferRef;
+  // Raw decoded frame size/buffer, only allocated while _dewarpConfig is
+  // non-nil: -renderFrame: writes the upright decoded frame here first,
+  // then _dewarpProcessor reads from it and writes the composite tile
+  // grid into _pixelBufferRef.
+  CGSize _rawFrameSize;
+  CVPixelBufferRef _rawPixelBufferRef;
+  RTCDewarpConfig* _dewarpConfig;
+  RTCDewarpProcessor* _dewarpProcessor;
   RTCVideoRotation _rotation;
   FlutterEventChannel* _eventChannel;
   bool _isFirstFrameRendered;
@@ -70,6 +84,10 @@
     CVBufferRelease(_pixelBufferRef);
     _pixelBufferRef = nil;
   }
+  if (_rawPixelBufferRef) {
+    CVBufferRelease(_rawPixelBufferRef);
+    _rawPixelBufferRef = nil;
+  }
   _frameAvailable = false;
   os_unfair_lock_unlock(&_lock);
 }
@@ -85,6 +103,7 @@
       [oldValue removeRenderer:self];
     }
     _frameSize = CGSizeZero;
+    _rawFrameSize = CGSizeZero;
     _renderSize = CGSizeZero;
     _rotation = -1;
     if (videoTrack) {
@@ -199,28 +218,41 @@
     return;
   }
   if(!_frameAvailable && _pixelBufferRef) {
-    [self copyI420ToCVPixelBuffer:_pixelBufferRef withFrame:frame];
+    if (_dewarpConfig != nil && _rawPixelBufferRef != nil) {
+      [self copyI420ToCVPixelBuffer:_rawPixelBufferRef withFrame:frame];
+      [self.dewarpProcessor renderConfig:_dewarpConfig
+                        sourcePixelBuffer:_rawPixelBufferRef
+                          destPixelBuffer:_pixelBufferRef];
+    } else {
+      [self copyI420ToCVPixelBuffer:_pixelBufferRef withFrame:frame];
+    }
     if(_textureId != -1) {
       [_registry textureFrameAvailable:_textureId];
     }
     _frameAvailable = true;
   }
+  // _frameSize is what _pixelBufferRef actually holds -- the raw decoded
+  // size normally, or the dewarped composite canvas size when dewarp is
+  // configured (see -setSize:). Report that, not the raw frame.width /
+  // frame.height, so RTCVideoView's aspect-ratio-driven layout on the
+  // Dart side matches what's actually on screen.
+  CGSize reportedSize = _frameSize;
   os_unfair_lock_unlock(&_lock);
 
   __weak FlutterRTCVideoRenderer* weakSelf = self;
-  if (_renderSize.width != frame.width || _renderSize.height != frame.height) {
+  if (_renderSize.width != reportedSize.width || _renderSize.height != reportedSize.height) {
     dispatch_async(dispatch_get_main_queue(), ^{
       FlutterRTCVideoRenderer* strongSelf = weakSelf;
       if (strongSelf.eventSink) {
         strongSelf.eventSink(@{
           @"event" : @"didTextureChangeVideoSize",
           @"id" : @(strongSelf.textureId),
-          @"width" : @(frame.width),
-          @"height" : @(frame.height),
+          @"width" : @(reportedSize.width),
+          @"height" : @(reportedSize.height),
         });
       }
     });
-    _renderSize = CGSizeMake(frame.width, frame.height);
+    _renderSize = reportedSize;
   }
 
   if (frame.rotation != _rotation) {
@@ -257,17 +289,56 @@
  */
 - (void)setSize:(CGSize)size {
   os_unfair_lock_lock(&_lock);
-  if (size.width != _frameSize.width || size.height != _frameSize.height) {
+  BOOL rawSizeChanged =
+      (size.width != _rawFrameSize.width || size.height != _rawFrameSize.height);
+  _rawFrameSize = size;
+
+  CGSize targetSize = _dewarpConfig != nil
+      ? [RTCDewarpProcessor compositeSizeForConfig:_dewarpConfig decodedSize:size]
+      : size;
+  if (targetSize.width != _frameSize.width || targetSize.height != _frameSize.height) {
     if (_pixelBufferRef) {
       CVBufferRelease(_pixelBufferRef);
     }
     NSDictionary* pixelAttributes = @{(id)kCVPixelBufferIOSurfacePropertiesKey : @{}};
-    CVPixelBufferCreate(kCFAllocatorDefault, size.width, size.height, kCVPixelFormatType_32BGRA,
-                        (__bridge CFDictionaryRef)(pixelAttributes), &_pixelBufferRef);
+    CVPixelBufferCreate(kCFAllocatorDefault, targetSize.width, targetSize.height,
+                        kCVPixelFormatType_32BGRA, (__bridge CFDictionaryRef)(pixelAttributes),
+                        &_pixelBufferRef);
     _frameAvailable = false;
-    _frameSize = size;
+    _frameSize = targetSize;
+  }
+
+  if (_dewarpConfig != nil) {
+    if (rawSizeChanged || _rawPixelBufferRef == nil) {
+      if (_rawPixelBufferRef) {
+        CVBufferRelease(_rawPixelBufferRef);
+      }
+      NSDictionary* rawPixelAttributes = @{(id)kCVPixelBufferIOSurfacePropertiesKey : @{}};
+      CVPixelBufferCreate(kCFAllocatorDefault, size.width, size.height, kCVPixelFormatType_32BGRA,
+                          (__bridge CFDictionaryRef)(rawPixelAttributes), &_rawPixelBufferRef);
+    }
+  } else if (_rawPixelBufferRef) {
+    CVBufferRelease(_rawPixelBufferRef);
+    _rawPixelBufferRef = nil;
   }
   os_unfair_lock_unlock(&_lock);
+}
+
+- (RTCDewarpProcessor*)dewarpProcessor {
+  if (_dewarpProcessor == nil) {
+    _dewarpProcessor = [[RTCDewarpProcessor alloc] init];
+  }
+  return _dewarpProcessor;
+}
+
+- (void)setDewarpConfig:(RTCDewarpConfig* _Nullable)config {
+  os_unfair_lock_lock(&_lock);
+  _dewarpConfig = config;
+  CGSize rawSize = _rawFrameSize;
+  os_unfair_lock_unlock(&_lock);
+  if (!CGSizeEqualToSize(rawSize, CGSizeZero)) {
+    [self setSize:rawSize];
+  }
 }
 
 #pragma mark - FlutterStreamHandler methods

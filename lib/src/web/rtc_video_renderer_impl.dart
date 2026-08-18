@@ -247,6 +247,11 @@ class RTCVideoRenderer extends ValueNotifier<RTCVideoValue>
     return super.dispose();
   }
 
+  /// Fisheye lens dewarping is a native-only (Android/iOS/macOS) feature.
+  /// This is a no-op on web, kept only so shared app code that calls it
+  /// unconditionally still compiles for the web target.
+  Future<void> setDewarpConfig(dynamic config) async {}
+
   @override
   Future<bool> audioOutput(String deviceId) async {
     try {

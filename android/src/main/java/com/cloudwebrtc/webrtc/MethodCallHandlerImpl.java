@@ -757,6 +757,29 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
         result.success(null);
         break;
       }
+      case "videoRendererSetDewarpConfig": {
+        int textureId = call.argument("textureId");
+        FlutterRTCVideoRenderer render = renders.get(textureId);
+        if (render == null) {
+          resultError("videoRendererSetDewarpConfig", "render [" + textureId + "] not found !", result);
+          return;
+        }
+        boolean enabled = Boolean.TRUE.equals(call.argument("enabled"));
+        if (!enabled) {
+          render.setDewarpConfig(null);
+          result.success(null);
+          break;
+        }
+        Map<String, Object> args = call.arguments();
+        try {
+          render.setDewarpConfig(DewarpConfig.fromMap(args));
+        } catch (IllegalArgumentException e) {
+          resultError("videoRendererSetDewarpConfig", e.getMessage(), result);
+          return;
+        }
+        result.success(null);
+        break;
+      }
       case "mediaStreamTrackHasTorch": {
         String trackId = call.argument("trackId");
         cameraUtils.hasTorch(trackId, result);

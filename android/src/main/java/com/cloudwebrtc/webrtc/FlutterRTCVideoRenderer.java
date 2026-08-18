@@ -11,7 +11,9 @@ import com.cloudwebrtc.webrtc.utils.EglUtils;
 import java.util.List;
 
 import org.webrtc.EglBase;
+import org.webrtc.GlRectDrawer;
 import org.webrtc.MediaStream;
+import org.webrtc.RendererCommon;
 import org.webrtc.RendererCommon.RendererEvents;
 import org.webrtc.VideoTrack;
 
@@ -66,14 +68,29 @@ public class FlutterRTCVideoRenderer implements EventChannel.StreamHandler {
                     int rotation) {
 
                 if (eventSink != null) {
-                    if (_width != videoWidth || _height != videoHeight) {
+                    // When dewarp is active, the destination surface no longer
+                    // holds a 1:1 copy of the decoded frame but the composited
+                    // tile grid, which is very likely a different aspect ratio
+                    // (e.g. a wide panorama strip). Report that composite size
+                    // instead of the raw decoder frame size so RTCVideoView's
+                    // aspect-ratio-driven layout on the Dart side stays correct.
+                    DewarpConfig currentDewarpConfig = dewarpConfig;
+                    int reportedWidth = videoWidth;
+                    int reportedHeight = videoHeight;
+                    if (currentDewarpConfig != null) {
+                        int[] compositeSize = DewarpGlDrawer.compositeSize(
+                                currentDewarpConfig, videoWidth, videoHeight);
+                        reportedWidth = compositeSize[0];
+                        reportedHeight = compositeSize[1];
+                    }
+                    if (_width != reportedWidth || _height != reportedHeight) {
                         ConstraintsMap params = new ConstraintsMap();
                         params.putString("event", "didTextureChangeVideoSize");
                         params.putInt("id", id);
-                        params.putDouble("width", (double) videoWidth);
-                        params.putDouble("height", (double) videoHeight);
-                        _width = videoWidth;
-                        _height = videoHeight;
+                        params.putDouble("width", (double) reportedWidth);
+                        params.putDouble("height", (double) reportedHeight);
+                        _width = reportedWidth;
+                        _height = reportedHeight;
                         eventSink.success(params.toMap());
                     }
 
@@ -98,18 +115,62 @@ public class FlutterRTCVideoRenderer implements EventChannel.StreamHandler {
     private VideoTrack videoTrack;
     private String videoTrackId;
 
+    /**
+     * Fisheye dewarp configuration set via
+     * {@link #setDewarpConfig(DewarpConfig)}, or {@code null} for the
+     * default passthrough rendering. Read from the render thread (by the
+     * {@code onFrameResolutionChanged} callback above) and written from the
+     * main thread, hence volatile.
+     */
+    private volatile DewarpConfig dewarpConfig;
+
     EventChannel eventChannel;
     EventChannel.EventSink eventSink;
 
     public FlutterRTCVideoRenderer(TextureRegistry.SurfaceProducer producer) {
         this.surfaceTextureRenderer = new SurfaceTextureRenderer("");
         listenRendererEvents();
-        surfaceTextureRenderer.init(EglUtils.getRootEglBaseContext(), rendererEvents);
+        surfaceTextureRenderer.init(
+                EglUtils.getRootEglBaseContext(), rendererEvents, EglBase.CONFIG_PLAIN, createDrawer());
         surfaceTextureRenderer.surfaceCreated(producer);
 
         this.eventSink = null;
         this.producer = producer;
         this.ownerTag = null;
+    }
+
+    /**
+     * Configures (or, passing {@code null}, clears) real-time fisheye lens
+     * dewarping for this renderer.
+     *
+     * This never disconnects or renegotiates anything at the WebRTC layer
+     * — {@link #videoTrack} itself, the underlying {@code MediaStreamTrack}
+     * and the peer connection it belongs to are all left completely alone.
+     * {@code removeRendererFromVideoTrack()}/{@code tryAddRendererToVideoTrack()}
+     * below only detach and reattach this renderer's own local
+     * {@code VideoSink} from the (unchanged) track — that's purely a local
+     * rendering-pipeline operation (needed because there is no way to swap
+     * a {@code GlDrawer} on a live {@code EglRenderer}; swapping requires a
+     * release()/init() cycle). The remote peer keeps sending frames the
+     * entire time; at most a frame or two is dropped locally during the
+     * brief detach window, not a stream interruption. Safe to call
+     * whenever a stream is already playing.
+     */
+    public void setDewarpConfig(DewarpConfig config) {
+        this.dewarpConfig = config;
+        if (videoTrack != null) {
+            removeRendererFromVideoTrack();
+            try {
+                tryAddRendererToVideoTrack();
+            } catch (Exception e) {
+                Log.e(TAG, "setDewarpConfig " + e);
+            }
+        }
+    }
+
+    private RendererCommon.GlDrawer createDrawer() {
+        DewarpConfig config = this.dewarpConfig;
+        return config == null ? new GlRectDrawer() : new DewarpGlDrawer(config);
     }
 
     public void setEventChannel(EventChannel eventChannel) {
@@ -259,7 +320,8 @@ public class FlutterRTCVideoRenderer implements EventChannel.StreamHandler {
 
             surfaceTextureRenderer.release();
             listenRendererEvents();
-            surfaceTextureRenderer.init(sharedContext, rendererEvents);
+            surfaceTextureRenderer.init(
+                    sharedContext, rendererEvents, EglBase.CONFIG_PLAIN, createDrawer());
             surfaceTextureRenderer.surfaceCreated(producer);
 
             videoTrack.addSink(surfaceTextureRenderer);

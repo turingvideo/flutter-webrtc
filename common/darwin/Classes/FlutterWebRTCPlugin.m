@@ -973,6 +973,32 @@ static __weak id<RTCAudioDeviceModuleDelegate> gAudioDeviceModuleObserver = nil;
     }
     [self rendererSetSrcObject:render stream:videoTrack];
     result(nil);
+  } else if ([@"videoRendererSetDewarpConfig" isEqualToString:call.method]) {
+    NSDictionary* argsMap = call.arguments;
+    NSNumber* textureId = argsMap[@"textureId"];
+    FlutterRTCVideoRenderer* render = self.renders[textureId];
+    if (!render) {
+      result([FlutterError errorWithCode:@"videoRendererSetDewarpConfig: render is nil"
+                                 message:nil
+                                 details:nil]);
+      return;
+    }
+    BOOL enabled = [argsMap[@"enabled"] boolValue];
+    if (!enabled) {
+      [render setDewarpConfig:nil];
+      result(nil);
+      return;
+    }
+    NSError* error = nil;
+    RTCDewarpConfig* config = [RTCDewarpConfig configFromDictionary:argsMap error:&error];
+    if (!config) {
+      result([FlutterError errorWithCode:@"videoRendererSetDewarpConfig"
+                                 message:error.localizedDescription
+                                 details:nil]);
+      return;
+    }
+    [render setDewarpConfig:config];
+    result(nil);
   }
 #if TARGET_OS_IPHONE || TARGET_OS_OSX
   else if ([@"videoPlatformViewRendererSetSrcObject" isEqualToString:call.method]) {
