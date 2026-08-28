@@ -5,20 +5,18 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-import 'package:webrtc_interface/webrtc_interface.dart';
-
 import 'rtc_video_platform_view_controller.dart';
 
 class RTCVideoPlatFormView extends StatefulWidget {
   const RTCVideoPlatFormView({
     super.key,
     required this.onViewReady,
-    this.objectFit = RTCVideoViewObjectFit.RTCVideoViewObjectFitContain,
+    this.objectFit = BoxFit.contain,
     this.mirror = false,
     this.placeholderBuilder,
   });
   final void Function(RTCVideoPlatformViewController)? onViewReady;
-  final RTCVideoViewObjectFit objectFit;
+  final BoxFit objectFit;
   final bool mirror;
   final WidgetBuilder? placeholderBuilder;
   @override
@@ -49,9 +47,7 @@ class NativeVideoPlayerViewState extends State<RTCVideoPlatFormView> {
   Widget _buildVideoView(BuildContext context, BoxConstraints constraints) {
     final nativeView = SizedBox(
       width: _showVideoView
-          ? widget.objectFit == RTCVideoViewObjectFit.RTCVideoViewObjectFitCover
-              ? constraints.maxWidth
-              : constraints.maxHeight * (_controller?.value.aspectRatio ?? 1.0)
+          ? constraints.maxHeight * (_controller?.value.aspectRatio ?? 1.0)
           : 0.1,
       height: _showVideoView ? constraints.maxHeight : 0.1,
       child: Transform(
@@ -79,10 +75,7 @@ class NativeVideoPlayerViewState extends State<RTCVideoPlatFormView> {
     return Center(
       child: FittedBox(
         clipBehavior: Clip.hardEdge,
-        fit: widget.objectFit ==
-                RTCVideoViewObjectFit.RTCVideoViewObjectFitContain
-            ? BoxFit.contain
-            : BoxFit.cover,
+        fit: widget.objectFit,
         child: Center(child: nativeView),
       ),
     );
