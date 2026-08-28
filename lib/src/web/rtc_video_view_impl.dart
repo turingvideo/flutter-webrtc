@@ -6,9 +6,7 @@ import 'dart:ui_web' as ui_web;
 
 import 'package:flutter/material.dart';
 
-import 'package:dart_webrtc/dart_webrtc.dart';
 import 'package:web/web.dart' as web;
-import 'package:webrtc_interface/webrtc_interface.dart';
 
 import 'rtc_video_renderer_impl.dart';
 
@@ -16,14 +14,14 @@ class RTCVideoView extends StatefulWidget {
   RTCVideoView(
     this._renderer, {
     super.key,
-    this.objectFit = RTCVideoViewObjectFit.RTCVideoViewObjectFitContain,
+    this.objectFit = BoxFit.contain,
     this.mirror = false,
     this.filterQuality = FilterQuality.low,
     this.placeholderBuilder,
   });
 
   final RTCVideoRenderer _renderer;
-  final RTCVideoViewObjectFit objectFit;
+  final BoxFit objectFit;
   final bool mirror;
   final FilterQuality filterQuality;
   final WidgetBuilder? placeholderBuilder;
@@ -42,10 +40,7 @@ class RTCVideoViewState extends State<RTCVideoView> {
     super.initState();
     videoRenderer.addListener(_onRendererListener);
     videoRenderer.mirror = widget.mirror;
-    videoRenderer.objectFit =
-        widget.objectFit == RTCVideoViewObjectFit.RTCVideoViewObjectFitContain
-            ? 'contain'
-            : 'cover';
+    videoRenderer.objectFit = _cssObjectFit(widget.objectFit);
 
     videoElement =
         web.document.getElementById("video_${videoRenderer.viewType}")
@@ -144,10 +139,7 @@ class RTCVideoViewState extends State<RTCVideoView> {
     super.didUpdateWidget(oldWidget);
     Timer(
         Duration(milliseconds: 10), () => videoRenderer.mirror = widget.mirror);
-    videoRenderer.objectFit =
-        widget.objectFit == RTCVideoViewObjectFit.RTCVideoViewObjectFitContain
-            ? 'contain'
-            : 'cover';
+    videoRenderer.objectFit = _cssObjectFit(widget.objectFit);
   }
 
   web.HTMLVideoElement? videoElement;
@@ -166,12 +158,7 @@ class RTCVideoViewState extends State<RTCVideoView> {
           if (capturedFrame != null)
             Positioned.fill(
                 child: FittedBox(
-                    fit: switch (widget.objectFit) {
-                      RTCVideoViewObjectFit.RTCVideoViewObjectFitContain =>
-                        BoxFit.contain,
-                      RTCVideoViewObjectFit.RTCVideoViewObjectFitCover =>
-                        BoxFit.cover,
-                    },
+                    fit: widget.objectFit,
                     clipBehavior: Clip.hardEdge,
                     child: SizedBox(
                         width: capturedFrame!.width.toDouble(),
@@ -185,6 +172,16 @@ class RTCVideoViewState extends State<RTCVideoView> {
         ]);
       });
     }
+  }
+
+  String _cssObjectFit(BoxFit fit) {
+    return switch (fit) {
+      BoxFit.fill => 'fill',
+      BoxFit.cover => 'cover',
+      BoxFit.none => 'none',
+      BoxFit.scaleDown => 'scale-down',
+      BoxFit.contain || BoxFit.fitWidth || BoxFit.fitHeight => 'contain',
+    };
   }
 
   @override
