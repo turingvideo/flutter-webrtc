@@ -73,6 +73,30 @@ public class DewarpConfig {
       return panoramaArcSpanDeg > 0;
     }
 
+    /**
+     * Fraction of the composite canvas height given to the base tile (the
+     * rest goes to the PTZ tile grid). Placeholder pending pixel-accurate UI
+     * mockups, same status as {@link DewarpGlDrawer}'s constants -- only
+     * {@link #THREE_SIXTY_PLUS_1_PTZ} deviates from the shared 0.5 default
+     * so far (product wants the overview strip to dominate: 2/3 overview,
+     * 1/3 scrollable close-up).
+     */
+    public float baseTileHeightFraction() {
+      return this == THREE_SIXTY_PLUS_1_PTZ ? 2f / 3f : 0.5f;
+    }
+
+    /**
+     * Whether this mode's PTZ tile(s) are a scrollable crop of the same
+     * cylindrical panorama projection as the base tile (pan-only, no
+     * independent tilt/perspective) rather than an independent rectilinear
+     * virtual-PTZ camera. Only {@link #THREE_SIXTY_PLUS_1_PTZ} does this so
+     * far -- product wants its close-up to feel like "scrub through the same
+     * overview", not a separate camera aimed somewhere.
+     */
+    public boolean usesPanoramaPtzTiles() {
+      return this == THREE_SIXTY_PLUS_1_PTZ;
+    }
+
     static DisplayMode fromWireName(String wireName) {
       for (DisplayMode v : values()) {
         if (v.wireName.equals(wireName)) return v;
@@ -82,7 +106,16 @@ public class DewarpConfig {
   }
 
   public static class PtzTile {
-    public final float panDeg;
+    /**
+     * Mutable (unlike the rest of this class, which is a snapshot from the
+     * last {@code videoRendererSetDewarpConfig} call): {@link
+     * FlutterRTCVideoRenderer#updatePtzTilePan} mutates this field in place
+     * on the main thread so a drag gesture can pan in real time without
+     * paying for a full renderer release()/init() cycle every frame. {@link
+     * DewarpGlDrawer} re-reads it fresh every frame on the render thread, so
+     * no other synchronization is needed for this single-float field.
+     */
+    public volatile float panDeg;
     public final float tiltDeg;
     public final float fovDeg;
 

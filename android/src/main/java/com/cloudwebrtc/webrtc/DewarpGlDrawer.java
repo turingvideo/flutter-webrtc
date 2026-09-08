@@ -49,8 +49,9 @@ import java.util.List;
  *
  * The projection math implements an equidistant fisheye lens model
  * (r = f*theta); see the "投影数学模型" section of the fisheye dewarp plan
- * for the derivation. Tile grid proportions (BASE_TILE_HEIGHT_FRACTION
- * below) are a placeholder pending pixel-accurate UI mockups.
+ * for the derivation. Tile grid proportions ({@link
+ * DewarpConfig.DisplayMode#baseTileHeightFraction()}) are a placeholder
+ * pending pixel-accurate UI mockups.
  */
 public class DewarpGlDrawer implements RendererCommon.GlDrawer {
 
@@ -169,7 +170,10 @@ public class DewarpGlDrawer implements RendererCommon.GlDrawer {
    * tilt + a phi-rotation simplifies to theta = THETA_MAX - atan(ndcV *
    * halfTan) -- see the fisheye dewarp plan for the full derivation.)
    * STRIP_VERTICAL_FOV_RAD is a placeholder pending real product tuning,
-   * same status as BASE_TILE_HEIGHT_FRACTION above.
+   * same status as {@link DewarpConfig.DisplayMode#baseTileHeightFraction()}
+   * above. Also reused, with a narrower arcPerStripRad, by {@link
+   * #drawPanoramaCropPtzTile} for modes where {@link
+   * DewarpConfig.DisplayMode#usesPanoramaPtzTiles()} is true.
    */
   private static final String PRIMITIVE_B_FRAGMENT_SHADER =
       "precision highp float;\n"
@@ -216,13 +220,10 @@ public class DewarpGlDrawer implements RendererCommon.GlDrawer {
   private static final FloatBuffer FULL_RECTANGLE_TEXCOORD_BUFFER =
       GlUtil.createFloatBuffer(new float[] {0f, 0f, 1f, 0f, 0f, 1f, 1f, 1f});
 
-  // Placeholder grid proportions; see the class doc. Base tile occupies the
-  // top of the canvas, PTZ tiles are packed into a roughly-square grid below.
-  private static final float BASE_TILE_HEIGHT_FRACTION = 0.5f;
-
   // Vertical field of view of Primitive B's per-column "pushbroom" camera
   // (see PRIMITIVE_B_FRAGMENT_SHADER's doc). Placeholder pending real
-  // product tuning, same status as BASE_TILE_HEIGHT_FRACTION above.
+  // product tuning, same status as
+  // DewarpConfig.DisplayMode.baseTileHeightFraction() above.
   private static final float STRIP_VERTICAL_FOV_DEG = 100f;
 
   private final DewarpConfig config;
@@ -332,8 +333,9 @@ public class DewarpGlDrawer implements RendererCommon.GlDrawer {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     int ptzTileCount = config.displayMode.ptzTileCount;
     int totalTiles = 1 + ptzTileCount;
+    float baseTileHeightFraction = config.displayMode.baseTileHeightFraction();
     for (int tileIndex = 0; tileIndex < totalTiles; tileIndex++) {
-      float[] rect = tileRectNormalizedTopLeft(tileIndex, ptzTileCount);
+      float[] rect = tileRectNormalizedTopLeft(tileIndex, ptzTileCount, baseTileHeightFraction);
       int tileX = viewportX + (int) (rect[0] * viewportWidth);
       int tileYTopLeft = (int) (rect[1] * viewportHeight);
       int tileW = Math.max(1, (int) (rect[2] * viewportWidth));
@@ -388,6 +390,10 @@ public class DewarpGlDrawer implements RendererCommon.GlDrawer {
   }
 
   private void drawPtzTile(DewarpConfig.PtzTile tile, int tileWidthPx, int tileHeightPx) {
+    if (config.displayMode.usesPanoramaPtzTiles()) {
+      drawPanoramaCropPtzTile(tile);
+      return;
+    }
     if (primitiveCShader == null) {
       primitiveCShader = new GlShader(COMPOSITE_VERTEX_SHADER, PRIMITIVE_C_FRAGMENT_SHADER);
     }
@@ -401,6 +407,33 @@ public class DewarpGlDrawer implements RendererCommon.GlDrawer {
     glUniform1f(primitiveCShader.getUniformLocation("halfTanFovH"), (float) Math.tan(fovHRad / 2.0));
     glUniform1f(primitiveCShader.getUniformLocation("halfTanFovV"), (float) Math.tan(fovVRad / 2.0));
     drawFullQuad(primitiveCShader);
+  }
+
+  /**
+   * Draws a horizontally-scrollable crop of the same cylindrical panorama
+   * projection used by {@link #drawBaseTile}, instead of an independent
+   * rectilinear virtual-PTZ camera: {@code tile.fovDeg} degrees of azimuth
+   * centered on {@code tile.panDeg}, at the fixed {@link
+   * #STRIP_VERTICAL_FOV_DEG} vertical FOV. {@code tile.tiltDeg} is ignored
+   * on purpose -- this tile only pans, matching the "scrub left/right
+   * through the overview, no up/down" product requirement. {@code
+   * tile.panDeg} is expected to be mutated live (see {@link
+   * DewarpConfig.PtzTile#panDeg}) as the user drags, so this re-reads it
+   * fresh every frame rather than caching anything.
+   */
+  private void drawPanoramaCropPtzTile(DewarpConfig.PtzTile tile) {
+    if (primitiveBShader == null) {
+      primitiveBShader = new GlShader(COMPOSITE_VERTEX_SHADER, PRIMITIVE_B_FRAGMENT_SHADER);
+    }
+    primitiveBShader.useProgram();
+    setFisheyeSampleUniforms(primitiveBShader);
+    float arcRad = (float) Math.toRadians(tile.fovDeg);
+    float stripStartRad = (float) Math.toRadians(tile.panDeg) - arcRad / 2f;
+    glUniform1f(primitiveBShader.getUniformLocation("arcPerStripRad"), arcRad);
+    glUniform1f(primitiveBShader.getUniformLocation("stripStartRad"), stripStartRad);
+    glUniform1f(primitiveBShader.getUniformLocation("halfTanStripVFov"),
+        (float) Math.tan(Math.toRadians(STRIP_VERTICAL_FOV_DEG) / 2.0));
+    drawFullQuad(primitiveBShader);
   }
 
   private void setFisheyeSampleUniforms(GlShader shader) {
@@ -422,14 +455,16 @@ public class DewarpGlDrawer implements RendererCommon.GlDrawer {
   /**
    * Returns {x, y, w, h} in [0,1], origin top-left / y-down, for the given
    * tile index (0 = base tile, 1..N = PTZ tiles). See
-   * BASE_TILE_HEIGHT_FRACTION doc: proportions are a placeholder.
+   * {@link DewarpConfig.DisplayMode#baseTileHeightFraction()} doc:
+   * proportions are a placeholder.
    */
-  private static float[] tileRectNormalizedTopLeft(int tileIndex, int ptzTileCount) {
+  private static float[] tileRectNormalizedTopLeft(
+      int tileIndex, int ptzTileCount, float baseTileHeightFraction) {
     if (ptzTileCount == 0) {
       return new float[] {0f, 0f, 1f, 1f};
     }
     if (tileIndex == 0) {
-      return new float[] {0f, 0f, 1f, BASE_TILE_HEIGHT_FRACTION};
+      return new float[] {0f, 0f, 1f, baseTileHeightFraction};
     }
     int ptzIndex = tileIndex - 1;
     int cols = (int) Math.ceil(Math.sqrt(ptzTileCount));
@@ -437,8 +472,8 @@ public class DewarpGlDrawer implements RendererCommon.GlDrawer {
     int col = ptzIndex % cols;
     int row = ptzIndex / cols;
     float cellW = 1f / cols;
-    float cellH = (1f - BASE_TILE_HEIGHT_FRACTION) / rows;
-    return new float[] {col * cellW, BASE_TILE_HEIGHT_FRACTION + row * cellH, cellW, cellH};
+    float cellH = (1f - baseTileHeightFraction) / rows;
+    return new float[] {col * cellW, baseTileHeightFraction + row * cellH, cellW, cellH};
   }
 
   /**
@@ -458,9 +493,10 @@ public class DewarpGlDrawer implements RendererCommon.GlDrawer {
       }
       return new int[] {decodedWidth, decodedWidth}; // raw circle: square canvas
     }
-    // base tile (BASE_TILE_HEIGHT_FRACTION tall) + a roughly-square PTZ grid
+    // base tile (baseTileHeightFraction tall) + a roughly-square PTZ grid
     // below it, both spanning the full width.
+    float baseTileHeightFraction = config.displayMode.baseTileHeightFraction();
     return new int[] {decodedWidth,
-        Math.max(1, (int) (decodedWidth / (2f - BASE_TILE_HEIGHT_FRACTION)))};
+        Math.max(1, (int) (decodedWidth / (2f - baseTileHeightFraction)))};
   }
 }
