@@ -2,15 +2,10 @@
 
 #import <CoreImage/CoreImage.h>
 
-// Placeholder grid proportions; see RTCDewarpProcessor.h and the matching
-// constant in DewarpGlDrawer.java. Base tile occupies the top of the
-// canvas, PTZ tiles are packed into a roughly-square grid below.
-static const CGFloat kBaseTileHeightFraction = 0.5;
-
 // Vertical field of view of Primitive B's per-column "pushbroom" camera
 // (see kPanoramaWarpKernelSource's doc below). Placeholder pending real
-// product tuning, same status as kBaseTileHeightFraction above. Matches
-// DewarpGlDrawer.STRIP_VERTICAL_FOV_DEG on Android exactly.
+// product tuning, same status as RTCDewarpConfig.baseTileHeightFraction.
+// Matches DewarpGlDrawer.STRIP_VERTICAL_FOV_DEG on Android exactly.
 static const CGFloat kStripVerticalFovDeg = 100.0;
 
 // Core Image Kernel Language source for the two projection primitives that
@@ -28,11 +23,15 @@ static const CGFloat kStripVerticalFovDeg = 100.0;
 // comment on PRIMITIVE_B_FRAGMENT_SHADER in DewarpGlDrawer.java (the
 // Android counterpart) for the full derivation. In short: each column is
 // treated as its own zero-width rectilinear ("pushbroom") camera pointed
-// at the horizon, so v=0.5 (tile center) always lands on the horizon
-// (theta=THETA_MAX) and verticals stay straight, matching how real
-// fisheye-camera "panorama" dewarp modes behave. halfTanStripVFov is a
-// placeholder pending real product tuning, same status as
-// kBaseTileHeightFraction above.
+// at the horizon, so v=1.0 (top of tile) always lands on the horizon
+// (theta=THETA_MAX), with theta decreasing toward the lens' own
+// zenith/nadir as v decreases to 0.0, and verticals stay straight,
+// matching how real fisheye-camera "panorama" dewarp modes behave. ndcV
+// only spans [0,1], not [-1,1]: theta can never legitimately exceed
+// THETA_MAX, so the other half of a symmetric sweep would just be the
+// out-of-bounds vec2(-1,-1) fallback below, wasting half the tile's
+// height on unsampled pixels. halfTanStripVFov is a placeholder pending
+// real product tuning, same status as kBaseTileHeightFraction above.
 static NSString* const kPanoramaWarpKernelSource =
     @"kernel vec2 panoramaWarp(float tileOriginX, float tileOriginY, float tileWidth,\n"
     @"    float tileHeight, float srcWidth, float srcHeight, float centerXNorm,\n"
@@ -43,7 +42,7 @@ static NSString* const kPanoramaWarpKernelSource =
     @"  vec2 d = destCoord();\n"
     @"  float u = (d.x - tileOriginX) / tileWidth;\n"
     @"  float v = (d.y - tileOriginY) / tileHeight;\n"
-    @"  float ndcV = v * 2.0 - 1.0;\n"
+    @"  float ndcV = 1.0 - v;\n"
     @"  float theta = 1.5707963268 - atan(ndcV * halfTanStripVFov);\n"
     @"  if (theta > 1.5707963268) {\n"
     @"    return vec2(-1.0, -1.0);\n"
@@ -145,6 +144,7 @@ static NSString* const kPtzWarpKernelSource =
   for (NSInteger tileIndex = 0; tileIndex < totalTiles; tileIndex++) {
     CGRect tileRect = [self tileRectForIndex:tileIndex
                                  ptzTileCount:ptzTileCount
+                    baseTileHeightFraction:config.baseTileHeightFraction
                                    destWidth:destWidth
                                   destHeight:destHeight];
     if (tileIndex == 0) {
@@ -228,6 +228,14 @@ static NSString* const kPtzWarpKernelSource =
                                    srcWidth:(CGFloat)srcWidth
                                   srcHeight:(CGFloat)srcHeight
                                    tileRect:(CGRect)tileRect {
+  if (config.usesPanoramaPtzTiles) {
+    return [self panoramaCropPtzTileImageForConfig:config
+                                               tile:tile
+                                        sourceImage:sourceImage
+                                           srcWidth:srcWidth
+                                          srcHeight:srcHeight
+                                           tileRect:tileRect];
+  }
   CIWarpKernel* kernel = self.ptzKernel;
   if (kernel == nil) return nil;
   CGFloat fovHRad = tile.fovDeg * M_PI / 180.0;
@@ -250,6 +258,44 @@ static NSString* const kPtzWarpKernelSource =
 }
 
 /**
+ * Renders a horizontally-scrollable crop of the same cylindrical panorama
+ * projection used by -renderBaseTileForConfig:..., instead of an
+ * independent rectilinear virtual-PTZ camera: `tile.fovDeg` degrees of
+ * azimuth centered on `tile.panDeg`, at the fixed kStripVerticalFovDeg
+ * vertical FOV. `tile.tiltDeg` is ignored on purpose -- this tile only
+ * pans, matching the "scrub left/right through the overview, no up/down"
+ * product requirement. `tile.panDeg` is expected to be mutated live (see
+ * RTCDewarpPtzTile.panDeg) as the user drags, so this re-reads it fresh
+ * every frame rather than caching anything. Mirrors
+ * DewarpGlDrawer.drawPanoramaCropPtzTile on Android exactly.
+ */
+- (nullable CIImage*)panoramaCropPtzTileImageForConfig:(RTCDewarpConfig*)config
+                                                   tile:(RTCDewarpPtzTile*)tile
+                                            sourceImage:(CIImage*)sourceImage
+                                               srcWidth:(CGFloat)srcWidth
+                                              srcHeight:(CGFloat)srcHeight
+                                               tileRect:(CGRect)tileRect {
+  CIWarpKernel* kernel = self.panoramaKernel;
+  if (kernel == nil) return nil;
+  CGFloat arcRad = tile.fovDeg * M_PI / 180.0;
+  CGFloat stripStartRad = (tile.panDeg * M_PI / 180.0) - arcRad / 2.0;
+  return [kernel applyWithExtent:tileRect
+                      roiCallback:^CGRect(int index, CGRect destRect) {
+                        return sourceImage.extent;
+                      }
+                       inputImage:sourceImage
+                        arguments:@[
+                          @(tileRect.origin.x), @(tileRect.origin.y), @(tileRect.size.width),
+                          @(tileRect.size.height), @(srcWidth), @(srcHeight),
+                          @(config.centerXNorm), @(config.centerYNorm), @(config.radiusNorm),
+                          @(config.rotationDeg * M_PI / 180.0),
+                          @(config.mountType == RTCDewarpMountTypeDesktop ? -1.0 : 1.0),
+                          @(arcRad), @(stripStartRad),
+                          @(tan(kStripVerticalFovDeg * M_PI / 180.0 / 2.0))
+                        ]];
+}
+
+/**
  * Returns the tile's rect in `destPixelBuffer`'s absolute pixel coordinate
  * space (Core Image convention: origin bottom-left, y-up). Mirrors
  * DewarpGlDrawer.tileRectNormalizedTopLeft's proportions, converted from
@@ -257,6 +303,7 @@ static NSString* const kPtzWarpKernelSource =
  */
 - (CGRect)tileRectForIndex:(NSInteger)tileIndex
                ptzTileCount:(NSInteger)ptzTileCount
+      baseTileHeightFraction:(CGFloat)baseTileHeightFraction
                   destWidth:(CGFloat)destWidth
                  destHeight:(CGFloat)destHeight {
   CGFloat xNorm, yNormTopDown, wNorm, hNorm;
@@ -269,7 +316,7 @@ static NSString* const kPtzWarpKernelSource =
     xNorm = 0;
     yNormTopDown = 0;
     wNorm = 1;
-    hNorm = kBaseTileHeightFraction;
+    hNorm = baseTileHeightFraction;
   } else {
     NSInteger ptzIndex = tileIndex - 1;
     NSInteger cols = (NSInteger)ceil(sqrt((double)ptzTileCount));
@@ -277,9 +324,9 @@ static NSString* const kPtzWarpKernelSource =
     NSInteger col = ptzIndex % cols;
     NSInteger row = ptzIndex / cols;
     CGFloat cellW = 1.0 / cols;
-    CGFloat cellH = (1.0 - kBaseTileHeightFraction) / rows;
+    CGFloat cellH = (1.0 - baseTileHeightFraction) / rows;
     xNorm = col * cellW;
-    yNormTopDown = kBaseTileHeightFraction + row * cellH;
+    yNormTopDown = baseTileHeightFraction + row * cellH;
     wNorm = cellW;
     hNorm = cellH;
   }
@@ -303,7 +350,7 @@ static NSString* const kPtzWarpKernelSource =
     return CGSizeMake(decodedSize.width, decodedSize.width);  // raw circle: square canvas
   }
   return CGSizeMake(decodedSize.width,
-                     MAX(1, decodedSize.width / (2.0 - kBaseTileHeightFraction)));
+                     MAX(1, decodedSize.width / (2.0 - config.baseTileHeightFraction)));
 }
 
 @end

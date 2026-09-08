@@ -95,6 +95,9 @@ NSString* const RTCDewarpConfigErrorDomain = @"FlutterWebRTC.RTCDewarpConfig";
         break;
     }
     _usesPanoramaBase = _panoramaArcSpanDeg > 0;
+    _baseTileHeightFraction =
+        displayMode == RTCDewarpDisplayModeThreeSixtyPlus1Ptz ? (2.0f / 3.0f) : 0.5f;
+    _usesPanoramaPtzTiles = displayMode == RTCDewarpDisplayModeThreeSixtyPlus1Ptz;
   }
   return self;
 }

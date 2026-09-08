@@ -40,7 +40,16 @@ typedef NS_ENUM(NSInteger, RTCDewarpDisplayMode) {
 /** Pan/tilt/zoom of a single virtual PTZ tile carved out of the fisheye image. */
 @interface RTCDewarpPtzTile : NSObject
 
-@property(nonatomic, readonly) float panDeg;
+/**
+ * Mutable (unlike the rest of RTCDewarpConfig, which is a snapshot from the
+ * last "videoRendererSetDewarpConfig" call): FlutterRTCVideoRenderer's
+ * updatePtzTilePan:panDeg: mutates this in place so a drag gesture can pan
+ * in real time without paying for a full renderer teardown every frame.
+ * RTCDewarpProcessor re-reads it fresh every frame, so no extra
+ * synchronization is needed for this single-float property -- matches
+ * DewarpConfig.PtzTile#panDeg's `volatile` on Android exactly.
+ */
+@property(nonatomic) float panDeg;
 @property(nonatomic, readonly) float tiltDeg;
 @property(nonatomic, readonly) float fovDeg;
 
@@ -79,6 +88,27 @@ typedef NS_ENUM(NSInteger, RTCDewarpDisplayMode) {
 
 /** Number of virtual PTZ tiles composited alongside the base tile. */
 @property(nonatomic, readonly) NSInteger ptzTileCount;
+
+/**
+ * Fraction of the composite canvas height given to the base tile (the rest
+ * goes to the PTZ tile grid). Placeholder pending pixel-accurate UI
+ * mockups, same status as RTCDewarpProcessor's constants -- only
+ * RTCDewarpDisplayModeThreeSixtyPlus1Ptz deviates from the shared 0.5
+ * default so far (product wants the overview strip to dominate: 2/3
+ * overview, 1/3 scrollable close-up). Matches
+ * DewarpConfig.DisplayMode#baseTileHeightFraction() on Android exactly.
+ */
+@property(nonatomic, readonly) float baseTileHeightFraction;
+
+/**
+ * Whether this mode's PTZ tile(s) are a scrollable crop of the same
+ * cylindrical panorama projection as the base tile (pan-only, no
+ * independent tilt/perspective) rather than an independent rectilinear
+ * virtual-PTZ camera. Only RTCDewarpDisplayModeThreeSixtyPlus1Ptz does this
+ * so far. Matches DewarpConfig.DisplayMode#usesPanoramaPtzTiles() on
+ * Android exactly.
+ */
+@property(nonatomic, readonly) BOOL usesPanoramaPtzTiles;
 
 /**
  * Parses a config sent from Dart. Returns nil and populates `error` if
