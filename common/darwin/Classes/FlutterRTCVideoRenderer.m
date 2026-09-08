@@ -341,6 +341,14 @@
   }
 }
 
+- (void)updatePtzTilePan:(NSInteger)tileIndex panDeg:(float)panDeg {
+  os_unfair_lock_lock(&_lock);
+  if (_dewarpConfig != nil && tileIndex >= 0 && tileIndex < (NSInteger)_dewarpConfig.ptzTiles.count) {
+    _dewarpConfig.ptzTiles[tileIndex].panDeg = panDeg;
+  }
+  os_unfair_lock_unlock(&_lock);
+}
+
 #pragma mark - FlutterStreamHandler methods
 
 - (FlutterError* _Nullable)onCancelWithArguments:(id _Nullable)arguments {

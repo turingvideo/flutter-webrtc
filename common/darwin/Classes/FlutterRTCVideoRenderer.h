@@ -38,6 +38,17 @@
  */
 - (void)setDewarpConfig:(RTCDewarpConfig* _Nullable)config;
 
+/**
+ * Pans a single PTZ tile of the current dewarp config in place, for
+ * drag-to-scroll interactions -- unlike -setDewarpConfig:, this never
+ * reallocates any buffers, since panning doesn't change the composite
+ * canvas size, only what's sampled into it. No-op if there is no active
+ * dewarp config or `tileIndex` is out of range (e.g. a stale call racing a
+ * mode switch that just cleared/replaced the config). Matches
+ * FlutterRTCVideoRenderer#updatePtzTilePan on Android exactly.
+ */
+- (void)updatePtzTilePan:(NSInteger)tileIndex panDeg:(float)panDeg;
+
 @end
 
 @interface FlutterWebRTCPlugin (FlutterVideoRendererManager)

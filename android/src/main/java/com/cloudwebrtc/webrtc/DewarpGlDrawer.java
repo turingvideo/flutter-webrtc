@@ -157,18 +157,23 @@ public class DewarpGlDrawer implements RendererCommon.GlDrawer {
    * Horizontally this sweeps azimuth linearly (phi), same as a naive
    * equirectangular unwrap would. Vertically it does NOT map linearly to
    * theta -- that would put the horizon at a fixed theta (matching the
-   * lens' own angular spacing) rather than at the tile's vertical center,
-   * and would vertically curve/compress objects standing near the strip's
-   * edges. Real fisheye-camera "panorama" dewarp modes instead treat each
-   * column as its own zero-width rectilinear ("pushbroom") camera pointed
-   * at the horizon, so verticals stay straight: STRIP_VERTICAL_FOV_RAD is
-   * that per-column camera's vertical FOV, and v=0.5 (tile center) always
-   * lands exactly on the horizon (theta=THETA_MAX) regardless of mount.
-   * (Derivation: a column's local ray is (0, ndcV*halfTan, 1) in a frame
-   * whose forward axis IS the horizon direction; rotating that frame back
-   * to the fisheye's own boresight-relative (theta,phi) via a fixed 90°
-   * tilt + a phi-rotation simplifies to theta = THETA_MAX - atan(ndcV *
-   * halfTan) -- see the fisheye dewarp plan for the full derivation.)
+   * lens' own angular spacing) rather than at the tile's edge, and would
+   * vertically curve/compress objects standing near the strip's edges.
+   * Real fisheye-camera "panorama" dewarp modes instead treat each column
+   * as its own zero-width rectilinear ("pushbroom") camera pointed at the
+   * horizon, so verticals stay straight: STRIP_VERTICAL_FOV_RAD is that
+   * per-column camera's vertical FOV, and v=1.0 (top of tile) always lands
+   * exactly on the horizon (theta=THETA_MAX) regardless of mount, with
+   * theta decreasing toward the lens' own zenith/nadir as v decreases to
+   * 0.0. (Derivation: a column's local ray is (0, ndcV*halfTan, 1) in a
+   * frame whose forward axis IS the horizon direction; rotating that frame
+   * back to the fisheye's own boresight-relative (theta,phi) via a fixed
+   * 90° tilt + a phi-rotation simplifies to theta = THETA_MAX - atan(ndcV *
+   * halfTan) -- see the fisheye dewarp plan for the full derivation. ndcV
+   * only spans [0,1], not [-1,1]: theta can never legitimately exceed
+   * THETA_MAX -- that's past the lens' own edge -- so the other half of a
+   * symmetric [-1,1] sweep would just be the fisheyeSample() out-of-bounds
+   * black fallback below, wasting half the tile's height on a black band.)
    * STRIP_VERTICAL_FOV_RAD is a placeholder pending real product tuning,
    * same status as {@link DewarpConfig.DisplayMode#baseTileHeightFraction()}
    * above. Also reused, with a narrower arcPerStripRad, by {@link
@@ -183,7 +188,7 @@ public class DewarpGlDrawer implements RendererCommon.GlDrawer {
           + "uniform float halfTanStripVFov;\n"
           + FISHEYE_SAMPLE_FUNCTION
           + "void main() {\n"
-          + "  float ndcV = v_tc.y * 2.0 - 1.0;\n"
+          + "  float ndcV = 1.0 - v_tc.y;\n"
           + "  float theta = THETA_MAX - atan(ndcV * halfTanStripVFov);\n"
           + "  float phi = stripStartRad + v_tc.x * arcPerStripRad;\n"
           + "  gl_FragColor = fisheyeSample(theta, phi);\n"
