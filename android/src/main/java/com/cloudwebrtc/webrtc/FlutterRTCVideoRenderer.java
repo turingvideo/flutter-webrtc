@@ -47,11 +47,28 @@ public class FlutterRTCVideoRenderer implements EventChannel.StreamHandler {
      */
     private RendererEvents rendererEvents;
 
+    /**
+     * Last raw decoder frame size seen (pre-dewarp), cached so {@link
+     * #setDewarpConfig} can immediately recompute the composite size without
+     * waiting for a genuine raw-resolution change. Written from the render
+     * thread, read from the main thread, hence volatile.
+     */
+    private volatile int lastRawWidth = 0;
+    private volatile int lastRawHeight = 0;
+
+    /**
+     * Last composite size / rotation actually reported to the Dart side via
+     * {@code didTextureChangeVideoSize} / {@code didTextureChangeRotation}.
+     * Only touched inside the synchronized {@code maybeReport*} methods below,
+     * which both {@link #onFrameResolutionChanged} (render thread) and {@link
+     * #setDewarpConfig} (main thread) call into.
+     */
+    private int reportedWidth = 0;
+    private int reportedHeight = 0;
+    private int reportedRotation = -1;
+
     private void listenRendererEvents() {
         rendererEvents = new RendererEvents() {
-            private int _rotation = -1;
-            private int _width = 0, _height = 0;
-
             @Override
             public void onFirstFrameRendered() {
                 ConstraintsMap params = new ConstraintsMap();
@@ -66,45 +83,62 @@ public class FlutterRTCVideoRenderer implements EventChannel.StreamHandler {
             public void onFrameResolutionChanged(
                     int videoWidth, int videoHeight,
                     int rotation) {
-
-                if (eventSink != null) {
-                    // When dewarp is active, the destination surface no longer
-                    // holds a 1:1 copy of the decoded frame but the composited
-                    // tile grid, which is very likely a different aspect ratio
-                    // (e.g. a wide panorama strip). Report that composite size
-                    // instead of the raw decoder frame size so RTCVideoView's
-                    // aspect-ratio-driven layout on the Dart side stays correct.
-                    DewarpConfig currentDewarpConfig = dewarpConfig;
-                    int reportedWidth = videoWidth;
-                    int reportedHeight = videoHeight;
-                    if (currentDewarpConfig != null) {
-                        int[] compositeSize = DewarpGlDrawer.compositeSize(
-                                currentDewarpConfig, videoWidth, videoHeight);
-                        reportedWidth = compositeSize[0];
-                        reportedHeight = compositeSize[1];
-                    }
-                    if (_width != reportedWidth || _height != reportedHeight) {
-                        ConstraintsMap params = new ConstraintsMap();
-                        params.putString("event", "didTextureChangeVideoSize");
-                        params.putInt("id", id);
-                        params.putDouble("width", (double) reportedWidth);
-                        params.putDouble("height", (double) reportedHeight);
-                        _width = reportedWidth;
-                        _height = reportedHeight;
-                        eventSink.success(params.toMap());
-                    }
-
-                    if (_rotation != rotation) {
-                        ConstraintsMap params2 = new ConstraintsMap();
-                        params2.putString("event", "didTextureChangeRotation");
-                        params2.putInt("id", id);
-                        params2.putInt("rotation", rotation);
-                        _rotation = rotation;
-                        eventSink.success(params2.toMap());
-                    }
-                }
+                lastRawWidth = videoWidth;
+                lastRawHeight = videoHeight;
+                maybeReportSizeChange(videoWidth, videoHeight);
+                maybeReportRotationChange(rotation);
             }
         };
+    }
+
+    /**
+     * Recomputes the reported size for raw decoder frame {@code (rawWidth,
+     * rawHeight)} -- the composite canvas size when {@link #dewarpConfig} is
+     * set, the raw size otherwise -- and notifies the Dart side if it differs
+     * from what was last reported, so {@code RTCVideoView}'s aspect-ratio-driven
+     * layout stays correct.
+     *
+     * Called from two places: {@link #onFrameResolutionChanged} on the render
+     * thread whenever the *raw* decoder resolution/rotation genuinely changes,
+     * and {@link #setDewarpConfig} on the main thread. The second call is what
+     * makes toggling dewarp mid-stream work: the composite size can change
+     * without the raw decoder resolution changing at all, so relying solely on
+     * {@link #onFrameResolutionChanged} would leave the Dart side holding a
+     * stale aspect ratio -- stretching/squashing the video -- until some
+     * unrelated raw resolution change happened to come along, if ever.
+     */
+    private synchronized void maybeReportSizeChange(int rawWidth, int rawHeight) {
+        if (eventSink == null || rawWidth <= 0 || rawHeight <= 0) return;
+
+        DewarpConfig currentDewarpConfig = dewarpConfig;
+        int width = rawWidth;
+        int height = rawHeight;
+        if (currentDewarpConfig != null) {
+            int[] compositeSize = DewarpGlDrawer.compositeSize(
+                    currentDewarpConfig, rawWidth, rawHeight);
+            width = compositeSize[0];
+            height = compositeSize[1];
+        }
+        if (reportedWidth == width && reportedHeight == height) return;
+
+        reportedWidth = width;
+        reportedHeight = height;
+        ConstraintsMap params = new ConstraintsMap();
+        params.putString("event", "didTextureChangeVideoSize");
+        params.putInt("id", id);
+        params.putDouble("width", (double) width);
+        params.putDouble("height", (double) height);
+        eventSink.success(params.toMap());
+    }
+
+    private synchronized void maybeReportRotationChange(int rotation) {
+        if (eventSink == null || reportedRotation == rotation) return;
+        reportedRotation = rotation;
+        ConstraintsMap params = new ConstraintsMap();
+        params.putString("event", "didTextureChangeRotation");
+        params.putInt("id", id);
+        params.putInt("rotation", rotation);
+        eventSink.success(params.toMap());
     }
 
     private final SurfaceTextureRenderer surfaceTextureRenderer;
@@ -158,6 +192,13 @@ public class FlutterRTCVideoRenderer implements EventChannel.StreamHandler {
      */
     public void setDewarpConfig(DewarpConfig config) {
         this.dewarpConfig = config;
+        // The composite size can change even though the raw decoder
+        // resolution hasn't -- proactively re-report it now instead of
+        // waiting for the next onFrameResolutionChanged, which is driven by
+        // the raw decoder and may not fire again for a long time, or ever.
+        if (lastRawWidth > 0 && lastRawHeight > 0) {
+            maybeReportSizeChange(lastRawWidth, lastRawHeight);
+        }
         if (videoTrack != null) {
             removeRendererFromVideoTrack();
             try {
