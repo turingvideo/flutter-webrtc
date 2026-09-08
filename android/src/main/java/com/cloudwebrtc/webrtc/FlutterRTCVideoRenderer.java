@@ -209,6 +209,28 @@ public class FlutterRTCVideoRenderer implements EventChannel.StreamHandler {
         }
     }
 
+    /**
+     * Pans a single PTZ tile of the current dewarp config in place, for
+     * drag-to-scroll interactions -- unlike {@link #setDewarpConfig}, this
+     * does *not* release()/init() the renderer, since a full EGL teardown
+     * per drag-frame would visibly stutter. {@link DewarpConfig.PtzTile
+     * #panDeg} is mutable and re-read fresh every frame by {@link
+     * DewarpGlDrawer} on the render thread, so mutating it here from the
+     * main thread is all that's needed for the change to show up on the
+     * next frame.
+     *
+     * No-ops if there is no active dewarp config or {@code tileIndex} is out
+     * of range (e.g. a stale call racing a mode switch that just cleared/
+     * replaced the config).
+     */
+    public void updatePtzTilePan(int tileIndex, float panDeg) {
+        DewarpConfig config = this.dewarpConfig;
+        if (config == null || tileIndex < 0 || tileIndex >= config.ptzTiles.size()) {
+            return;
+        }
+        config.ptzTiles.get(tileIndex).panDeg = panDeg;
+    }
+
     private RendererCommon.GlDrawer createDrawer() {
         DewarpConfig config = this.dewarpConfig;
         return config == null ? new GlRectDrawer() : new DewarpGlDrawer(config);

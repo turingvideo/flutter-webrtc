@@ -127,6 +127,37 @@ class RTCVideoRenderer extends ValueNotifier<RTCVideoValue>
     });
   }
 
+  /// Pans a single PTZ tile of the current [setDewarpConfig] config in
+  /// place, for drag-to-scroll interactions.
+  ///
+  /// Unlike [setDewarpConfig], this does not tear down and recreate the
+  /// renderer -- it just mutates that one tile's pan angle, so it's cheap
+  /// enough to call on every frame of a drag gesture. Only meaningful after
+  /// a config with at least `tileIndex + 1` PTZ tiles has already been
+  /// applied via [setDewarpConfig]; calling this first, or with an
+  /// out-of-range [tileIndex], is a no-op on the native side.
+  ///
+  /// Native-only (Android/iOS/macOS): a no-op everywhere else, same as
+  /// [setDewarpConfig].
+  Future<void> updatePtzTilePan(int tileIndex, double panDeg) async {
+    if (_disposed) {
+      throw 'Can\'t update PTZ tile pan: The RTCVideoRenderer is disposed';
+    }
+    if (_textureId == null) {
+      throw 'Call initialize before updating a PTZ tile\'s pan';
+    }
+    if (!(WebRTC.platformIsAndroid ||
+        WebRTC.platformIsIOS ||
+        WebRTC.platformIsMacOS)) {
+      return;
+    }
+    await WebRTC.invokeMethod('videoRendererUpdatePtzTilePan', <String, dynamic>{
+      'textureId': _textureId,
+      'tileIndex': tileIndex,
+      'panDeg': panDeg,
+    });
+  }
+
   @override
   Future<void> dispose() async {
     if (_disposed) return;
