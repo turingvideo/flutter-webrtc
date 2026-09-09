@@ -173,6 +173,23 @@ static NSString* const kPtzWarpKernelSource =
                        srcHeight:(CGFloat)srcHeight
                         tileRect:(CGRect)tileRect
                  destPixelBuffer:(CVPixelBufferRef)destPixelBuffer {
+  if (config.usesPanoramaPtzTiles) {
+    // Both windows are independent pannable crops of the same panorama, at
+    // the same default FOV -- this one is just bigger. See
+    // RTCDewarpConfig.basePanDeg's doc.
+    float fovDeg = config.ptzTiles.count > 0 ? config.ptzTiles[0].fovDeg : 90.0f;
+    CIImage* tileImage = [self panoramaCropImageForConfig:config
+                                                    panDeg:config.basePanDeg
+                                                    fovDeg:fovDeg
+                                               sourceImage:sourceImage
+                                                  srcWidth:srcWidth
+                                                 srcHeight:srcHeight
+                                                  tileRect:tileRect];
+    if (tileImage != nil) {
+      [_ciContext render:tileImage toCVPixelBuffer:destPixelBuffer bounds:tileRect colorSpace:nil];
+    }
+    return;
+  }
   if (!config.usesPanoramaBase) {
     // Primitive A: raw fisheye passthrough. No warp kernel needed -- just
     // scale+translate the source image to fill the tile rect.
@@ -229,12 +246,13 @@ static NSString* const kPtzWarpKernelSource =
                                   srcHeight:(CGFloat)srcHeight
                                    tileRect:(CGRect)tileRect {
   if (config.usesPanoramaPtzTiles) {
-    return [self panoramaCropPtzTileImageForConfig:config
-                                               tile:tile
-                                        sourceImage:sourceImage
-                                           srcWidth:srcWidth
-                                          srcHeight:srcHeight
-                                           tileRect:tileRect];
+    return [self panoramaCropImageForConfig:config
+                                      panDeg:tile.panDeg
+                                      fovDeg:tile.fovDeg
+                                 sourceImage:sourceImage
+                                    srcWidth:srcWidth
+                                   srcHeight:srcHeight
+                                    tileRect:tileRect];
   }
   CIWarpKernel* kernel = self.ptzKernel;
   if (kernel == nil) return nil;
@@ -259,26 +277,29 @@ static NSString* const kPtzWarpKernelSource =
 
 /**
  * Renders a horizontally-scrollable crop of the same cylindrical panorama
- * projection used by -renderBaseTileForConfig:..., instead of an
- * independent rectilinear virtual-PTZ camera: `tile.fovDeg` degrees of
- * azimuth centered on `tile.panDeg`, at the fixed kStripVerticalFovDeg
- * vertical FOV. `tile.tiltDeg` is ignored on purpose -- this tile only
- * pans, matching the "scrub left/right through the overview, no up/down"
- * product requirement. `tile.panDeg` is expected to be mutated live (see
- * RTCDewarpPtzTile.panDeg) as the user drags, so this re-reads it fresh
- * every frame rather than caching anything. Mirrors
- * DewarpGlDrawer.drawPanoramaCropPtzTile on Android exactly.
+ * projection used by -renderBaseTileForConfig:...'s ordinary
+ * (non-pannable) path, instead of a fixed full-arc flatten or an
+ * independent rectilinear virtual-PTZ camera: `fovDeg` degrees of azimuth
+ * centered on `panDeg`, at the fixed kStripVerticalFovDeg vertical FOV. No
+ * tilt parameter -- both the base tile and PTZ tile callers of this only
+ * pan, matching the "scrub left/right through the overview, no up/down"
+ * product requirement. `panDeg` is expected to be mutated live (see
+ * RTCDewarpConfig.basePanDeg / RTCDewarpPtzTile.panDeg) as the user drags,
+ * so this re-reads whatever the caller passes fresh every frame rather
+ * than caching anything. Mirrors DewarpGlDrawer.drawPanoramaCrop on
+ * Android exactly.
  */
-- (nullable CIImage*)panoramaCropPtzTileImageForConfig:(RTCDewarpConfig*)config
-                                                   tile:(RTCDewarpPtzTile*)tile
-                                            sourceImage:(CIImage*)sourceImage
-                                               srcWidth:(CGFloat)srcWidth
-                                              srcHeight:(CGFloat)srcHeight
-                                               tileRect:(CGRect)tileRect {
+- (nullable CIImage*)panoramaCropImageForConfig:(RTCDewarpConfig*)config
+                                          panDeg:(float)panDeg
+                                          fovDeg:(float)fovDeg
+                                     sourceImage:(CIImage*)sourceImage
+                                        srcWidth:(CGFloat)srcWidth
+                                       srcHeight:(CGFloat)srcHeight
+                                        tileRect:(CGRect)tileRect {
   CIWarpKernel* kernel = self.panoramaKernel;
   if (kernel == nil) return nil;
-  CGFloat arcRad = tile.fovDeg * M_PI / 180.0;
-  CGFloat stripStartRad = (tile.panDeg * M_PI / 180.0) - arcRad / 2.0;
+  CGFloat arcRad = fovDeg * M_PI / 180.0;
+  CGFloat stripStartRad = (panDeg * M_PI / 180.0) - arcRad / 2.0;
   return [kernel applyWithExtent:tileRect
                       roiCallback:^CGRect(int index, CGRect destRect) {
                         return sourceImage.extent;

@@ -134,6 +134,17 @@ public class DewarpConfig {
   public final float rotationDeg;
   public final List<PtzTile> ptzTiles;
 
+  /**
+   * Independent pan for the base tile, only meaningful when {@link
+   * DisplayMode#usesPanoramaPtzTiles()} is true: in that case the base tile
+   * is *also* a pannable crop of the panorama (same FOV as {@code
+   * ptzTiles.get(0)}, per product's "both windows default to the same
+   * zoom, but pan independently" requirement), not a single fixed
+   * full-arc flatten. Mutable/volatile for the same drag-in-real-time
+   * reason as {@link PtzTile#panDeg}; defaults to 0 (unrotated).
+   */
+  public volatile float basePanDeg;
+
   public DewarpConfig(MountType mountType, DisplayMode displayMode, float centerXNorm,
                        float centerYNorm, float radiusNorm, float rotationDeg,
                        List<PtzTile> ptzTiles) {
@@ -144,6 +155,7 @@ public class DewarpConfig {
     this.radiusNorm = radiusNorm;
     this.rotationDeg = rotationDeg;
     this.ptzTiles = ptzTiles;
+    this.basePanDeg = 0f;
   }
 
   /**

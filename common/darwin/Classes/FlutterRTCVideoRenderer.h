@@ -49,6 +49,15 @@
  */
 - (void)updatePtzTilePan:(NSInteger)tileIndex panDeg:(float)panDeg;
 
+/**
+ * Same idea as -updatePtzTilePan:panDeg:, but for the base tile's own
+ * independent pan (see RTCDewarpConfig.basePanDeg) -- only meaningful when
+ * the current display mode's base tile is itself a pannable panorama crop
+ * rather than a fixed full-arc flatten. Matches
+ * FlutterRTCVideoRenderer#updateBaseTilePan on Android exactly.
+ */
+- (void)updateBaseTilePan:(float)panDeg;
+
 @end
 
 @interface FlutterWebRTCPlugin (FlutterVideoRendererManager)
