@@ -1013,6 +1013,19 @@ static __weak id<RTCAudioDeviceModuleDelegate> gAudioDeviceModuleObserver = nil;
     float panDeg = [argsMap[@"panDeg"] floatValue];
     [render updatePtzTilePan:tileIndex panDeg:panDeg];
     result(nil);
+  } else if ([@"videoRendererUpdateBaseTilePan" isEqualToString:call.method]) {
+    NSDictionary* argsMap = call.arguments;
+    NSNumber* textureId = argsMap[@"textureId"];
+    FlutterRTCVideoRenderer* render = self.renders[textureId];
+    if (!render) {
+      result([FlutterError errorWithCode:@"videoRendererUpdateBaseTilePan: render is nil"
+                                 message:nil
+                                 details:nil]);
+      return;
+    }
+    float panDeg = [argsMap[@"panDeg"] floatValue];
+    [render updateBaseTilePan:panDeg];
+    result(nil);
   }
 #if TARGET_OS_IPHONE || TARGET_OS_OSX
   else if ([@"videoPlatformViewRendererSetSrcObject" isEqualToString:call.method]) {

@@ -349,6 +349,14 @@
   os_unfair_lock_unlock(&_lock);
 }
 
+- (void)updateBaseTilePan:(float)panDeg {
+  os_unfair_lock_lock(&_lock);
+  if (_dewarpConfig != nil) {
+    _dewarpConfig.basePanDeg = panDeg;
+  }
+  os_unfair_lock_unlock(&_lock);
+}
+
 #pragma mark - FlutterStreamHandler methods
 
 - (FlutterError* _Nullable)onCancelWithArguments:(id _Nullable)arguments {

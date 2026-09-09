@@ -793,6 +793,18 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
         result.success(null);
         break;
       }
+      case "videoRendererUpdateBaseTilePan": {
+        int textureId = call.argument("textureId");
+        FlutterRTCVideoRenderer render = renders.get(textureId);
+        if (render == null) {
+          resultError("videoRendererUpdateBaseTilePan", "render [" + textureId + "] not found !", result);
+          return;
+        }
+        double panDeg = call.argument("panDeg");
+        render.updateBaseTilePan((float) panDeg);
+        result.success(null);
+        break;
+      }
       case "mediaStreamTrackHasTorch": {
         String trackId = call.argument("trackId");
         cameraUtils.hasTorch(trackId, result);

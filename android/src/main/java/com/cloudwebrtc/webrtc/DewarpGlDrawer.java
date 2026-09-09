@@ -360,6 +360,14 @@ public class DewarpGlDrawer implements RendererCommon.GlDrawer {
   }
 
   private void drawBaseTile(int tileX, int tileYGl, int tileW, int tileH) {
+    if (config.displayMode.usesPanoramaPtzTiles()) {
+      // Both windows are independent pannable crops of the same panorama,
+      // at the same default FOV -- this one is just bigger. See
+      // DewarpConfig.basePanDeg's doc.
+      float fovDeg = config.ptzTiles.isEmpty() ? 90f : config.ptzTiles.get(0).fovDeg;
+      drawPanoramaCrop(config.basePanDeg, fovDeg);
+      return;
+    }
     if (!config.displayMode.usesPanoramaBase()) {
       if (primitiveAShader == null) {
         primitiveAShader = new GlShader(COMPOSITE_VERTEX_SHADER, PRIMITIVE_A_FRAGMENT_SHADER);
@@ -396,7 +404,7 @@ public class DewarpGlDrawer implements RendererCommon.GlDrawer {
 
   private void drawPtzTile(DewarpConfig.PtzTile tile, int tileWidthPx, int tileHeightPx) {
     if (config.displayMode.usesPanoramaPtzTiles()) {
-      drawPanoramaCropPtzTile(tile);
+      drawPanoramaCrop(tile.panDeg, tile.fovDeg);
       return;
     }
     if (primitiveCShader == null) {
@@ -416,24 +424,26 @@ public class DewarpGlDrawer implements RendererCommon.GlDrawer {
 
   /**
    * Draws a horizontally-scrollable crop of the same cylindrical panorama
-   * projection used by {@link #drawBaseTile}, instead of an independent
-   * rectilinear virtual-PTZ camera: {@code tile.fovDeg} degrees of azimuth
-   * centered on {@code tile.panDeg}, at the fixed {@link
-   * #STRIP_VERTICAL_FOV_DEG} vertical FOV. {@code tile.tiltDeg} is ignored
-   * on purpose -- this tile only pans, matching the "scrub left/right
-   * through the overview, no up/down" product requirement. {@code
-   * tile.panDeg} is expected to be mutated live (see {@link
-   * DewarpConfig.PtzTile#panDeg}) as the user drags, so this re-reads it
-   * fresh every frame rather than caching anything.
+   * projection used by {@link #drawBaseTile}'s ordinary (non-pannable)
+   * path, instead of a fixed full-arc flatten or an independent
+   * rectilinear virtual-PTZ camera: {@code fovDeg} degrees of azimuth
+   * centered on {@code panDeg}, at the fixed {@link
+   * #STRIP_VERTICAL_FOV_DEG} vertical FOV. No tilt parameter -- both the
+   * base tile and PTZ tile callers of this only pan, matching the "scrub
+   * left/right through the overview, no up/down" product requirement.
+   * {@code panDeg} is expected to be mutated live (see {@link
+   * DewarpConfig#basePanDeg} / {@link DewarpConfig.PtzTile#panDeg}) as the
+   * user drags, so this re-reads whatever the caller passes fresh every
+   * frame rather than caching anything.
    */
-  private void drawPanoramaCropPtzTile(DewarpConfig.PtzTile tile) {
+  private void drawPanoramaCrop(float panDeg, float fovDeg) {
     if (primitiveBShader == null) {
       primitiveBShader = new GlShader(COMPOSITE_VERTEX_SHADER, PRIMITIVE_B_FRAGMENT_SHADER);
     }
     primitiveBShader.useProgram();
     setFisheyeSampleUniforms(primitiveBShader);
-    float arcRad = (float) Math.toRadians(tile.fovDeg);
-    float stripStartRad = (float) Math.toRadians(tile.panDeg) - arcRad / 2f;
+    float arcRad = (float) Math.toRadians(fovDeg);
+    float stripStartRad = (float) Math.toRadians(panDeg) - arcRad / 2f;
     glUniform1f(primitiveBShader.getUniformLocation("arcPerStripRad"), arcRad);
     glUniform1f(primitiveBShader.getUniformLocation("stripStartRad"), stripStartRad);
     glUniform1f(primitiveBShader.getUniformLocation("halfTanStripVFov"),
