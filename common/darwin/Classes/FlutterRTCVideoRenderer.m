@@ -349,10 +349,11 @@
   os_unfair_lock_unlock(&_lock);
 }
 
-- (void)updateBaseTilePan:(float)panDeg {
+- (void)updateBaseTileOffset:(float)panDeg tiltDeg:(float)tiltDeg {
   os_unfair_lock_lock(&_lock);
   if (_dewarpConfig != nil) {
     _dewarpConfig.basePanDeg = panDeg;
+    _dewarpConfig.baseTiltDeg = tiltDeg;
   }
   os_unfair_lock_unlock(&_lock);
 }

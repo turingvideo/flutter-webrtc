@@ -92,10 +92,42 @@ static NSString* const kPtzWarpKernelSource =
     @"  return vec2(texXTopDown * srcWidth, (1.0 - texYTopDown) * srcHeight);\n"
     @"}\n";
 
+/**
+ * Plain rectangular crop of the raw fisheye circle -- pan and tilt an
+ * offset window around center, no theta/phi reprojection at all (unlike
+ * the two kernels above, which both treat the destination as a ray into
+ * the scene). Coordinates outside the source texture are clamped to the
+ * nearest edge rather than returning (-1,-1) (Core Image's "sample
+ * nothing" sentinel, used by the other two kernels above to fall back to
+ * black), so panning/zooming near the edge of the circle stretches
+ * existing content instead of showing a black band -- this deliberately
+ * does *not* try to detect "still inside the circle vs. into the black
+ * corner margin around it"; product wants "never black", not "never
+ * inaccurate at the very edge". Mirrors
+ * DewarpGlDrawer.PRIMITIVE_D_FRAGMENT_SHADER on Android exactly.
+ */
+static NSString* const kDirectCropWarpKernelSource =
+    @"kernel vec2 directCropWarp(float tileOriginX, float tileOriginY, float tileWidth,\n"
+    @"    float tileHeight, float srcWidth, float srcHeight, float centerXNorm,\n"
+    @"    float centerYNorm, float radiusNorm, float verticalFlipSign,\n"
+    @"    float cropOffsetXNorm, float cropOffsetYNorm, float cropHalfSizeNorm)\n"
+    @"{\n"
+    @"  vec2 d = destCoord();\n"
+    @"  float u = (d.x - tileOriginX) / tileWidth;\n"
+    @"  float v = (d.y - tileOriginY) / tileHeight;\n"
+    @"  vec2 ndc = vec2(u, v) * 2.0 - 1.0;\n"
+    @"  vec2 center = vec2(centerXNorm, centerYNorm);\n"
+    @"  vec2 texTopDown = center + vec2(cropOffsetXNorm, cropOffsetYNorm) * radiusNorm\n"
+    @"      + ndc * cropHalfSizeNorm * radiusNorm * vec2(1.0, verticalFlipSign);\n"
+    @"  texTopDown = clamp(texTopDown, vec2(0.0), vec2(1.0));\n"
+    @"  return vec2(texTopDown.x * srcWidth, (1.0 - texTopDown.y) * srcHeight);\n"
+    @"}\n";
+
 @implementation RTCDewarpProcessor {
   CIContext* _ciContext;
   CIWarpKernel* _panoramaKernel;
   CIWarpKernel* _ptzKernel;
+  CIWarpKernel* _directCropKernel;
 }
 
 - (instancetype)init {
@@ -128,6 +160,17 @@ static NSString* const kPtzWarpKernelSource =
 #pragma clang diagnostic pop
   }
   return _ptzKernel;
+}
+
+- (CIWarpKernel*)directCropKernel {
+  if (_directCropKernel == nil) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    _directCropKernel =
+        (CIWarpKernel*)[CIWarpKernel kernelWithString:kDirectCropWarpKernelSource];
+#pragma clang diagnostic pop
+  }
+  return _directCropKernel;
 }
 
 - (void)renderConfig:(RTCDewarpConfig*)config
@@ -173,18 +216,19 @@ static NSString* const kPtzWarpKernelSource =
                        srcHeight:(CGFloat)srcHeight
                         tileRect:(CGRect)tileRect
                  destPixelBuffer:(CVPixelBufferRef)destPixelBuffer {
-  if (config.usesPanoramaPtzTiles) {
-    // Both windows are independent pannable crops of the same panorama, at
-    // the same default FOV -- this one is just bigger. See
-    // RTCDewarpConfig.basePanDeg's doc.
+  if (config.usesDirectCropBase) {
+    // Same default zoom as the PTZ tile below it, per product's "both
+    // windows default to the same zoom" requirement -- see
+    // RTCDewarpConfig.basePanDeg/baseTiltDeg's doc.
     float fovDeg = config.ptzTiles.count > 0 ? config.ptzTiles[0].fovDeg : 90.0f;
-    CIImage* tileImage = [self panoramaCropImageForConfig:config
-                                                    panDeg:config.basePanDeg
-                                                    fovDeg:fovDeg
-                                               sourceImage:sourceImage
-                                                  srcWidth:srcWidth
-                                                 srcHeight:srcHeight
-                                                  tileRect:tileRect];
+    CIImage* tileImage = [self directCropImageForConfig:config
+                                                  panDeg:config.basePanDeg
+                                                 tiltDeg:config.baseTiltDeg
+                                                  fovDeg:fovDeg
+                                             sourceImage:sourceImage
+                                                srcWidth:srcWidth
+                                               srcHeight:srcHeight
+                                                tileRect:tileRect];
     if (tileImage != nil) {
       [_ciContext render:tileImage toCVPixelBuffer:destPixelBuffer bounds:tileRect colorSpace:nil];
     }
@@ -313,6 +357,43 @@ static NSString* const kPtzWarpKernelSource =
                           @(config.mountType == RTCDewarpMountTypeDesktop ? -1.0 : 1.0),
                           @(arcRad), @(stripStartRad),
                           @(tan(kStripVerticalFovDeg * M_PI / 180.0 / 2.0))
+                        ]];
+}
+
+/**
+ * Renders Primitive D (see kDirectCropWarpKernelSource's doc): a plain
+ * rectangular crop of the raw circle, offset by (panDeg, tiltDeg) from
+ * center and sized by fovDeg. These three float "degrees" parameters are
+ * reused from the same RTCDewarpPtzTile-shaped inputs as
+ * -panoramaCropImageForConfig:... purely so the Dart-side model doesn't
+ * need a separate shape for this mode -- there is no actual angle math
+ * here, they're just linearly rescaled to normalized crop units:
+ * offsetNorm = offsetDeg / 90, cropHalfSizeNorm = fovDeg / 180 (fovDeg=180
+ * shows the full diameter centered on the offset point; smaller values
+ * zoom in). Mirrors DewarpGlDrawer.drawDirectCircleCrop on Android
+ * exactly.
+ */
+- (nullable CIImage*)directCropImageForConfig:(RTCDewarpConfig*)config
+                                        panDeg:(float)panDeg
+                                       tiltDeg:(float)tiltDeg
+                                        fovDeg:(float)fovDeg
+                                   sourceImage:(CIImage*)sourceImage
+                                      srcWidth:(CGFloat)srcWidth
+                                     srcHeight:(CGFloat)srcHeight
+                                      tileRect:(CGRect)tileRect {
+  CIWarpKernel* kernel = self.directCropKernel;
+  if (kernel == nil) return nil;
+  return [kernel applyWithExtent:tileRect
+                      roiCallback:^CGRect(int index, CGRect destRect) {
+                        return sourceImage.extent;
+                      }
+                       inputImage:sourceImage
+                        arguments:@[
+                          @(tileRect.origin.x), @(tileRect.origin.y), @(tileRect.size.width),
+                          @(tileRect.size.height), @(srcWidth), @(srcHeight),
+                          @(config.centerXNorm), @(config.centerYNorm), @(config.radiusNorm),
+                          @(config.mountType == RTCDewarpMountTypeDesktop ? -1.0 : 1.0),
+                          @(panDeg / 90.0), @(tiltDeg / 90.0), @(fovDeg / 180.0)
                         ]];
 }
 

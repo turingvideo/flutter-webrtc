@@ -793,15 +793,16 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
         result.success(null);
         break;
       }
-      case "videoRendererUpdateBaseTilePan": {
+      case "videoRendererUpdateBaseTileOffset": {
         int textureId = call.argument("textureId");
         FlutterRTCVideoRenderer render = renders.get(textureId);
         if (render == null) {
-          resultError("videoRendererUpdateBaseTilePan", "render [" + textureId + "] not found !", result);
+          resultError("videoRendererUpdateBaseTileOffset", "render [" + textureId + "] not found !", result);
           return;
         }
         double panDeg = call.argument("panDeg");
-        render.updateBaseTilePan((float) panDeg);
+        double tiltDeg = call.argument("tiltDeg");
+        render.updateBaseTileOffset((float) panDeg, (float) tiltDeg);
         result.success(null);
         break;
       }

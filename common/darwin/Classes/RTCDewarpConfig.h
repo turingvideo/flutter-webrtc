@@ -88,6 +88,14 @@ typedef NS_ENUM(NSInteger, RTCDewarpDisplayMode) {
 @property(nonatomic) float basePanDeg;
 
 /**
+ * Vertical counterpart to basePanDeg, only meaningful when
+ * usesDirectCropBase is true (in that mode the base tile pans on both
+ * axes, unlike a PTZ tile crop which is pan-only). Matches
+ * DewarpConfig.baseTiltDeg on Android exactly.
+ */
+@property(nonatomic) float baseTiltDeg;
+
+/**
  * A display mode's base tile is either the raw fisheye circle
  * (panoramaArcSpanDeg == 0) or a panorama strip unwrapped from this arc
  * span, optionally split into panoramaSplitCount stacked strips (only
@@ -120,6 +128,19 @@ typedef NS_ENUM(NSInteger, RTCDewarpDisplayMode) {
  * Android exactly.
  */
 @property(nonatomic, readonly) BOOL usesPanoramaPtzTiles;
+
+/**
+ * Whether this mode's *base* tile is a plain rectangular crop of the raw
+ * fisheye circle -- pan+tilt, no theta/phi reprojection at all -- instead
+ * of a cylindrical panorama unwrap or a fixed full-arc flatten. Bounded
+ * and edge-clamped rather than black-on-out-of-range, per product's "acts
+ * like zooming into the original circular image, never shows black"
+ * requirement. Only RTCDewarpDisplayModeThreeSixtyPlus1Ptz does this so
+ * far; its PTZ tile is unaffected (still governed by
+ * usesPanoramaPtzTiles). Matches
+ * DewarpConfig.DisplayMode#usesDirectCropBase() on Android exactly.
+ */
+@property(nonatomic, readonly) BOOL usesDirectCropBase;
 
 /**
  * Parses a config sent from Dart. Returns nil and populates `error` if
