@@ -231,6 +231,18 @@ public class FlutterRTCVideoRenderer implements EventChannel.StreamHandler {
         config.ptzTiles.get(tileIndex).panDeg = panDeg;
     }
 
+    /**
+     * Same idea as {@link #updatePtzTilePan}, but for the base tile's own
+     * independent pan (see {@link DewarpConfig#basePanDeg}) -- only
+     * meaningful when the current display mode's base tile is itself a
+     * pannable panorama crop rather than a fixed full-arc flatten.
+     */
+    public void updateBaseTilePan(float panDeg) {
+        DewarpConfig config = this.dewarpConfig;
+        if (config == null) return;
+        config.basePanDeg = panDeg;
+    }
+
     private RendererCommon.GlDrawer createDrawer() {
         DewarpConfig config = this.dewarpConfig;
         return config == null ? new GlRectDrawer() : new DewarpGlDrawer(config);

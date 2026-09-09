@@ -77,6 +77,17 @@ typedef NS_ENUM(NSInteger, RTCDewarpDisplayMode) {
 @property(nonatomic, readonly, copy) NSArray<RTCDewarpPtzTile*>* ptzTiles;
 
 /**
+ * Independent pan for the base tile, only meaningful when
+ * usesPanoramaPtzTiles is true: in that case the base tile is *also* a
+ * pannable crop of the panorama (same FOV as ptzTiles[0], per product's
+ * "both windows default to the same zoom, but pan independently"
+ * requirement), not a single fixed full-arc flatten. Mutable for the same
+ * drag-in-real-time reason as RTCDewarpPtzTile.panDeg; defaults to 0
+ * (unrotated). Matches DewarpConfig.basePanDeg on Android exactly.
+ */
+@property(nonatomic) float basePanDeg;
+
+/**
  * A display mode's base tile is either the raw fisheye circle
  * (panoramaArcSpanDeg == 0) or a panorama strip unwrapped from this arc
  * span, optionally split into panoramaSplitCount stacked strips (only
