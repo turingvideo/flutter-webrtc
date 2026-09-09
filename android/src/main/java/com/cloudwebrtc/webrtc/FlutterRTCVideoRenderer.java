@@ -233,14 +233,17 @@ public class FlutterRTCVideoRenderer implements EventChannel.StreamHandler {
 
     /**
      * Same idea as {@link #updatePtzTilePan}, but for the base tile's own
-     * independent pan (see {@link DewarpConfig#basePanDeg}) -- only
-     * meaningful when the current display mode's base tile is itself a
-     * pannable panorama crop rather than a fixed full-arc flatten.
+     * independent pan+tilt offset (see {@link DewarpConfig#basePanDeg}/
+     * {@link DewarpConfig#baseTiltDeg}) -- only meaningful when the current
+     * display mode's base tile is a direct rectangular crop (see {@link
+     * DewarpConfig.DisplayMode#usesDirectCropBase}). Takes both axes in one
+     * call since a drag gesture naturally produces both at once.
      */
-    public void updateBaseTilePan(float panDeg) {
+    public void updateBaseTileOffset(float panDeg, float tiltDeg) {
         DewarpConfig config = this.dewarpConfig;
         if (config == null) return;
         config.basePanDeg = panDeg;
+        config.baseTiltDeg = tiltDeg;
     }
 
     private RendererCommon.GlDrawer createDrawer() {

@@ -159,27 +159,31 @@ class RTCVideoRenderer extends ValueNotifier<RTCVideoValue>
   }
 
   /// Same idea as [updatePtzTilePan], but for the base tile's own
-  /// independent pan -- only meaningful for a [FisheyeDisplayMode] whose
-  /// base tile is itself a pannable panorama crop rather than a fixed
-  /// full-arc flatten (currently just [FisheyeDisplayMode.threeSixtyPlus1Ptz]).
+  /// independent pan+tilt offset -- only meaningful for a
+  /// [FisheyeDisplayMode] whose base tile is a direct rectangular crop of
+  /// the raw circle (currently just
+  /// [FisheyeDisplayMode.threeSixtyPlus1Ptz]), not a panorama unwrap or
+  /// fixed full-arc flatten. Takes both axes in one call since a drag
+  /// gesture naturally produces both at once.
   ///
   /// Native-only (Android/iOS/macOS): a no-op everywhere else, same as
   /// [setDewarpConfig].
-  Future<void> updateBaseTilePan(double panDeg) async {
+  Future<void> updateBaseTileOffset(double panDeg, double tiltDeg) async {
     if (_disposed) {
-      throw 'Can\'t update base tile pan: The RTCVideoRenderer is disposed';
+      throw 'Can\'t update base tile offset: The RTCVideoRenderer is disposed';
     }
     if (_textureId == null) {
-      throw 'Call initialize before updating the base tile\'s pan';
+      throw 'Call initialize before updating the base tile\'s offset';
     }
     if (!(WebRTC.platformIsAndroid ||
         WebRTC.platformIsIOS ||
         WebRTC.platformIsMacOS)) {
       return;
     }
-    await WebRTC.invokeMethod('videoRendererUpdateBaseTilePan', <String, dynamic>{
+    await WebRTC.invokeMethod('videoRendererUpdateBaseTileOffset', <String, dynamic>{
       'textureId': _textureId,
       'panDeg': panDeg,
+      'tiltDeg': tiltDeg,
     });
   }
 
