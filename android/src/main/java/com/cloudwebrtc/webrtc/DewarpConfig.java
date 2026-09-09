@@ -97,6 +97,21 @@ public class DewarpConfig {
       return this == THREE_SIXTY_PLUS_1_PTZ;
     }
 
+    /**
+     * Whether this mode's *base* tile is a plain rectangular crop of the
+     * raw fisheye circle -- pan+tilt, no theta/phi reprojection at all --
+     * instead of a cylindrical panorama unwrap or a fixed full-arc
+     * flatten. Bounded (see {@link DewarpConfig#basePanDeg}/{@link
+     * DewarpConfig#baseTiltDeg}) and edge-clamped rather than
+     * black-on-out-of-range, per product's "acts like zooming into the
+     * original circular image, never shows black" requirement. Only
+     * {@link #THREE_SIXTY_PLUS_1_PTZ} does this so far; its PTZ tile is
+     * unaffected (still governed by {@link #usesPanoramaPtzTiles()}).
+     */
+    public boolean usesDirectCropBase() {
+      return this == THREE_SIXTY_PLUS_1_PTZ;
+    }
+
     static DisplayMode fromWireName(String wireName) {
       for (DisplayMode v : values()) {
         if (v.wireName.equals(wireName)) return v;
@@ -135,15 +150,16 @@ public class DewarpConfig {
   public final List<PtzTile> ptzTiles;
 
   /**
-   * Independent pan for the base tile, only meaningful when {@link
-   * DisplayMode#usesPanoramaPtzTiles()} is true: in that case the base tile
-   * is *also* a pannable crop of the panorama (same FOV as {@code
-   * ptzTiles.get(0)}, per product's "both windows default to the same
-   * zoom, but pan independently" requirement), not a single fixed
-   * full-arc flatten. Mutable/volatile for the same drag-in-real-time
-   * reason as {@link PtzTile#panDeg}; defaults to 0 (unrotated).
+   * Horizontal/vertical offset (in the same "degrees" unit as {@link
+   * PtzTile#panDeg}, reinterpreted -- see {@link
+   * DewarpGlDrawer#drawDirectCircleCrop}) of the base tile's crop window
+   * from the calibrated circle center, only meaningful when {@link
+   * DisplayMode#usesDirectCropBase()} is true. Mutable/volatile for the
+   * same drag-in-real-time reason as {@link PtzTile#panDeg}; both default
+   * to 0 (crop centered on the circle).
    */
   public volatile float basePanDeg;
+  public volatile float baseTiltDeg;
 
   public DewarpConfig(MountType mountType, DisplayMode displayMode, float centerXNorm,
                        float centerYNorm, float radiusNorm, float rotationDeg,
@@ -156,6 +172,7 @@ public class DewarpConfig {
     this.rotationDeg = rotationDeg;
     this.ptzTiles = ptzTiles;
     this.basePanDeg = 0f;
+    this.baseTiltDeg = 0f;
   }
 
   /**

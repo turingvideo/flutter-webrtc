@@ -218,6 +218,39 @@ public class DewarpGlDrawer implements RendererCommon.GlDrawer {
           + "  gl_FragColor = fisheyeSample(theta, phi);\n"
           + "}\n";
 
+  /**
+   * Primitive D: plain rectangular crop of the raw fisheye circle -- pan
+   * and tilt an offset window around {@code center}, no theta/phi
+   * reprojection at all (unlike Primitives B/C, which both treat the
+   * destination as a ray into the scene). Samples outside the source
+   * texture are clamped to the nearest edge pixel rather than returning
+   * black, so panning/zooming near the edge of the circle stretches
+   * existing content instead of showing a black band -- this deliberately
+   * does *not* try to detect "still inside the circle vs. into the black
+   * corner margin around it"; product wants "never black", not "never
+   * inaccurate at the very edge". center/radius are calibrated top-down
+   * (see FISHEYE_SAMPLE_FUNCTION's doc); this shader works directly in
+   * that space and does its own top-down-to-GL-bottom-up flip at the end,
+   * so it doesn't reuse fisheyeSample() (which also does per-pixel
+   * theta-based invalidation this primitive has no use for).
+   */
+  private static final String PRIMITIVE_D_FRAGMENT_SHADER =
+      "precision highp float;\n"
+          + "varying vec2 v_tc;\n"
+          + "uniform sampler2D sourceTex;\n"
+          + "uniform vec2 center;\n"
+          + "uniform float radius;\n"
+          + "uniform float verticalFlipSign;\n"
+          + "uniform vec2 cropOffsetNorm;\n"
+          + "uniform float cropHalfSizeNorm;\n"
+          + "void main() {\n"
+          + "  vec2 ndc = v_tc * 2.0 - 1.0;\n"
+          + "  vec2 texTopDown = center + cropOffsetNorm * radius\n"
+          + "      + ndc * cropHalfSizeNorm * radius * vec2(1.0, verticalFlipSign);\n"
+          + "  texTopDown = clamp(texTopDown, vec2(0.0), vec2(1.0));\n"
+          + "  gl_FragColor = texture2D(sourceTex, vec2(texTopDown.x, 1.0 - texTopDown.y));\n"
+          + "}\n";
+
   // Full [-1,1] quad, drawn with GL_TRIANGLE_STRIP; texcoord doubles as the
   // per-tile destination coordinate in [0,1] consumed by every shader above.
   private static final FloatBuffer FULL_RECTANGLE_BUFFER =
@@ -239,6 +272,7 @@ public class DewarpGlDrawer implements RendererCommon.GlDrawer {
   private GlShader primitiveAShader;
   private GlShader primitiveBShader;
   private GlShader primitiveCShader;
+  private GlShader primitiveDShader;
   private GlTextureFrameBuffer normalizedFrameBuffer;
 
   public DewarpGlDrawer(DewarpConfig config) {
@@ -309,6 +343,7 @@ public class DewarpGlDrawer implements RendererCommon.GlDrawer {
     if (primitiveAShader != null) primitiveAShader.release();
     if (primitiveBShader != null) primitiveBShader.release();
     if (primitiveCShader != null) primitiveCShader.release();
+    if (primitiveDShader != null) primitiveDShader.release();
     if (normalizedFrameBuffer != null) normalizedFrameBuffer.release();
     blitOesShader = null;
     blitRgbShader = null;
@@ -316,6 +351,7 @@ public class DewarpGlDrawer implements RendererCommon.GlDrawer {
     primitiveAShader = null;
     primitiveBShader = null;
     primitiveCShader = null;
+    primitiveDShader = null;
     normalizedFrameBuffer = null;
   }
 
@@ -360,12 +396,12 @@ public class DewarpGlDrawer implements RendererCommon.GlDrawer {
   }
 
   private void drawBaseTile(int tileX, int tileYGl, int tileW, int tileH) {
-    if (config.displayMode.usesPanoramaPtzTiles()) {
-      // Both windows are independent pannable crops of the same panorama,
-      // at the same default FOV -- this one is just bigger. See
-      // DewarpConfig.basePanDeg's doc.
+    if (config.displayMode.usesDirectCropBase()) {
+      // Same default zoom as the PTZ tile below it, per product's "both
+      // windows default to the same zoom" requirement -- see
+      // DewarpConfig.basePanDeg/baseTiltDeg's doc.
       float fovDeg = config.ptzTiles.isEmpty() ? 90f : config.ptzTiles.get(0).fovDeg;
-      drawPanoramaCrop(config.basePanDeg, fovDeg);
+      drawDirectCircleCrop(config.basePanDeg, config.baseTiltDeg, fovDeg);
       return;
     }
     if (!config.displayMode.usesPanoramaBase()) {
@@ -449,6 +485,35 @@ public class DewarpGlDrawer implements RendererCommon.GlDrawer {
     glUniform1f(primitiveBShader.getUniformLocation("halfTanStripVFov"),
         (float) Math.tan(Math.toRadians(STRIP_VERTICAL_FOV_DEG) / 2.0));
     drawFullQuad(primitiveBShader);
+  }
+
+  /**
+   * Draws Primitive D (see its doc): a plain rectangular crop of the raw
+   * circle, offset by ({@code panOffsetDeg}, {@code tiltOffsetDeg}) from
+   * center and sized by {@code fovDeg}. These three float "degrees"
+   * parameters are reused from the same {@link DewarpConfig.PtzTile}-shaped
+   * inputs as {@link #drawPanoramaCrop} purely so the Dart-side model
+   * doesn't need a separate shape for this mode -- there is no actual
+   * angle math here, they're just linearly rescaled to normalized crop
+   * units: {@code offsetNorm = offsetDeg / 90}, {@code
+   * cropHalfSizeNorm = fovDeg / 180} (fovDeg=180 shows the full diameter
+   * centered on the offset point; smaller values zoom in).
+   */
+  private void drawDirectCircleCrop(float panOffsetDeg, float tiltOffsetDeg, float fovDeg) {
+    if (primitiveDShader == null) {
+      primitiveDShader = new GlShader(COMPOSITE_VERTEX_SHADER, PRIMITIVE_D_FRAGMENT_SHADER);
+    }
+    primitiveDShader.useProgram();
+    glUniform1i(primitiveDShader.getUniformLocation("sourceTex"), 0);
+    glUniform2f(primitiveDShader.getUniformLocation("center"), config.centerXNorm,
+        config.centerYNorm);
+    glUniform1f(primitiveDShader.getUniformLocation("radius"), config.radiusNorm);
+    glUniform1f(primitiveDShader.getUniformLocation("verticalFlipSign"),
+        config.mountType == DewarpConfig.MountType.DESKTOP ? -1f : 1f);
+    glUniform2f(primitiveDShader.getUniformLocation("cropOffsetNorm"), panOffsetDeg / 90f,
+        tiltOffsetDeg / 90f);
+    glUniform1f(primitiveDShader.getUniformLocation("cropHalfSizeNorm"), fovDeg / 180f);
+    drawFullQuad(primitiveDShader);
   }
 
   private void setFisheyeSampleUniforms(GlShader shader) {
