@@ -96,14 +96,18 @@ static NSString* const kPtzWarpKernelSource =
  * Plain rectangular crop of the raw fisheye circle -- pan and tilt an
  * offset window around center, no theta/phi reprojection at all (unlike
  * the two kernels above, which both treat the destination as a ray into
- * the scene). Coordinates outside the source texture are clamped to the
- * nearest edge rather than returning (-1,-1) (Core Image's "sample
- * nothing" sentinel, used by the other two kernels above to fall back to
- * black), so panning/zooming near the edge of the circle stretches
- * existing content instead of showing a black band -- this deliberately
- * does *not* try to detect "still inside the circle vs. into the black
- * corner margin around it"; product wants "never black", not "never
- * inaccurate at the very edge". Mirrors
+ * the scene). A square crop inevitably has corners farther from its
+ * center than the inscribed circle's radius, so a naive crop shows the
+ * real black margin around the lens' circular image in those corners.
+ * Instead of sampling that black margin as-is, any point that would land
+ * outside the circle is radially clamped back onto the circle's edge
+ * (same direction from center, distance capped at radiusNorm) before
+ * sampling -- this stretches the rim of the actual image outward to fill
+ * the corners. Coordinates are then also clamped to the source texture's
+ * own bounds rather than returning (-1,-1) (Core Image's "sample nothing"
+ * sentinel, used by the other two kernels above to fall back to black),
+ * so panning/zooming near the edge of the circle also stretches existing
+ * content instead of showing a black band. Mirrors
  * DewarpGlDrawer.PRIMITIVE_D_FRAGMENT_SHADER on Android exactly.
  */
 static NSString* const kDirectCropWarpKernelSource =
@@ -119,6 +123,11 @@ static NSString* const kDirectCropWarpKernelSource =
     @"  vec2 center = vec2(centerXNorm, centerYNorm);\n"
     @"  vec2 texTopDown = center + vec2(cropOffsetXNorm, cropOffsetYNorm) * radiusNorm\n"
     @"      + ndc * cropHalfSizeNorm * radiusNorm * vec2(1.0, verticalFlipSign);\n"
+    @"  vec2 rel = texTopDown - center;\n"
+    @"  float dist = length(rel);\n"
+    @"  if (dist > radiusNorm) {\n"
+    @"    texTopDown = center + rel * (radiusNorm / dist);\n"
+    @"  }\n"
     @"  texTopDown = clamp(texTopDown, vec2(0.0), vec2(1.0));\n"
     @"  return vec2(texTopDown.x * srcWidth, (1.0 - texTopDown.y) * srcHeight);\n"
     @"}\n";
