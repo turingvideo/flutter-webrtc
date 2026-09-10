@@ -222,17 +222,21 @@ public class DewarpGlDrawer implements RendererCommon.GlDrawer {
    * Primitive D: plain rectangular crop of the raw fisheye circle -- pan
    * and tilt an offset window around {@code center}, no theta/phi
    * reprojection at all (unlike Primitives B/C, which both treat the
-   * destination as a ray into the scene). Samples outside the source
-   * texture are clamped to the nearest edge pixel rather than returning
-   * black, so panning/zooming near the edge of the circle stretches
-   * existing content instead of showing a black band -- this deliberately
-   * does *not* try to detect "still inside the circle vs. into the black
-   * corner margin around it"; product wants "never black", not "never
-   * inaccurate at the very edge". center/radius are calibrated top-down
-   * (see FISHEYE_SAMPLE_FUNCTION's doc); this shader works directly in
-   * that space and does its own top-down-to-GL-bottom-up flip at the end,
-   * so it doesn't reuse fisheyeSample() (which also does per-pixel
-   * theta-based invalidation this primitive has no use for).
+   * destination as a ray into the scene). A square crop inevitably has
+   * corners farther from its center than the inscribed circle's radius, so
+   * a naive crop shows the real black margin around the lens' circular
+   * image in those corners. Instead of sampling that black margin as-is,
+   * any point that would land outside the circle is radially clamped back
+   * onto the circle's edge (same direction from {@code center}, distance
+   * capped at {@code radius}) before sampling -- this stretches the rim of
+   * the actual image outward to fill the corners, matching the same
+   * "never black, stretch instead" rule already applied to the texture-
+   * bounds clamp below for panning/zooming near the edge. center/radius
+   * are calibrated top-down (see FISHEYE_SAMPLE_FUNCTION's doc); this
+   * shader works directly in that space and does its own top-down-to-GL-
+   * bottom-up flip at the end, so it doesn't reuse fisheyeSample() (which
+   * also does per-pixel theta-based invalidation this primitive has no use
+   * for).
    */
   private static final String PRIMITIVE_D_FRAGMENT_SHADER =
       "precision highp float;\n"
@@ -247,6 +251,11 @@ public class DewarpGlDrawer implements RendererCommon.GlDrawer {
           + "  vec2 ndc = v_tc * 2.0 - 1.0;\n"
           + "  vec2 texTopDown = center + cropOffsetNorm * radius\n"
           + "      + ndc * cropHalfSizeNorm * radius * vec2(1.0, verticalFlipSign);\n"
+          + "  vec2 rel = texTopDown - center;\n"
+          + "  float dist = length(rel);\n"
+          + "  if (dist > radius) {\n"
+          + "    texTopDown = center + rel * (radius / dist);\n"
+          + "  }\n"
           + "  texTopDown = clamp(texTopDown, vec2(0.0), vec2(1.0));\n"
           + "  gl_FragColor = texture2D(sourceTex, vec2(texTopDown.x, 1.0 - texTopDown.y));\n"
           + "}\n";
