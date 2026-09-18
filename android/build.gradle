@@ -56,6 +56,18 @@ android {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
     }
+
+    // Fisheye dewarp source lives under ../fisheye instead of src/main/java so
+    // it stays together with its darwin (common/darwin -> fisheye/darwin) and
+    // vendor-SDK counterparts instead of being scattered across per-platform
+    // source trees. Package declarations are unchanged (still
+    // com.cloudwebrtc.webrtc), so this is just an extra source root, not a
+    // package rename.
+    sourceSets {
+        main {
+            java.srcDirs += '../fisheye/android/src/main/java'
+        }
+    }
 }
 
 // Configure the Kotlin JVM target. The compilerOptions DSL requires KGP 1.9+ or
