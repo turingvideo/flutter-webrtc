@@ -1,1 +1,1 @@
-../../../../../../common/darwin/Classes/RTCDewarpConfig.h
+../../../../../../fisheye/darwin/Classes/RTCDewarpConfig.h
