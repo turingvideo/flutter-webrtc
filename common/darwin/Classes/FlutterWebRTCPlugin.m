@@ -11,6 +11,7 @@
 #import "FlutterRTCFrameCryptor.h"
 #if TARGET_OS_IPHONE
 #import "FlutterRTCMediaRecorder.h"
+#import "MediaSdkFisheyePlayer.h"
 #endif
 #if TARGET_OS_IPHONE || TARGET_OS_OSX
 #import "FlutterRTCVideoPlatformViewFactory.h"
@@ -1121,6 +1122,50 @@ static void FlutterWebRTCApplyFieldTrials(void) {
     [render updateBaseTileOffset:panDeg tiltDeg:tiltDeg];
     result(nil);
   }
+#if TARGET_OS_IPHONE
+  else if ([@"fisheyeMediaSdkStart" isEqualToString:call.method]) {
+    NSDictionary* argsMap = call.arguments;
+    NSString* rtspUrl = argsMap[@"rtspUrl"];
+    NSUInteger ptzMode = [argsMap[@"ptzMode"] unsignedIntegerValue];
+    NSUInteger fixMode = [argsMap[@"fixMode"] unsignedIntegerValue];
+    if (!rtspUrl) {
+      result([FlutterError errorWithCode:@"fisheyeMediaSdkStart: rtspUrl is required"
+                                 message:nil
+                                 details:nil]);
+      return;
+    }
+    if (!self.mediaSdkFisheyePlayer) {
+      self.mediaSdkFisheyePlayer = [[MediaSdkFisheyePlayer alloc] init];
+    }
+    self.mediaSdkFisheyePlayer.eventSink = self.eventSink;
+    // MediaSDK_StartStream blocks until the RTSP session connects (or
+    // fails) -- matches the reference call sequence in fisheye/README.md
+    // (bAsync=BOOL_FALSE), so this must run off the main thread.
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+      BOOL started = [self.mediaSdkFisheyePlayer startWithRtspUrl:rtspUrl
+                                                            ptzMode:ptzMode
+                                                            fixMode:fixMode];
+      dispatch_async(dispatch_get_main_queue(), ^{
+        if (started) {
+          result(nil);
+        } else {
+          result([FlutterError
+              errorWithCode:@"fisheyeMediaSdkStart: see console log \"[MediaSdkFisheyePlayer]\" "
+                            @"for the failing step"
+                    message:nil
+                    details:nil]);
+        }
+      });
+    });
+  } else if ([@"fisheyeMediaSdkStop" isEqualToString:call.method]) {
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+      [self.mediaSdkFisheyePlayer stop];
+      dispatch_async(dispatch_get_main_queue(), ^{
+        result(nil);
+      });
+    });
+  }
+#endif
 #if TARGET_OS_IPHONE || TARGET_OS_OSX
   else if ([@"videoPlatformViewRendererSetSrcObject" isEqualToString:call.method]) {
       NSDictionary* argsMap = call.arguments;

@@ -12,6 +12,9 @@
 @class FlutterRTCFrameCapturer;
 @class FlutterRTCMediaRecorder;
 @class AudioManager;
+#if TARGET_OS_IPHONE
+@class MediaSdkFisheyePlayer;
+#endif
 
 void postEvent(FlutterEventSink _Nullable sink, id _Nullable event);
 
@@ -52,6 +55,11 @@ typedef void (^CapturerStopHandler)(CompletionHandler _Nonnull handler);
 #if TARGET_OS_IPHONE
 @property(nonatomic, retain)
     UIViewController* _Nullable viewController; /*for broadcast or ReplayKit */
+
+// Vendor MediaSDK spike (see fisheye/README.md) -- iOS only, the vendor
+// only shipped an iOS build of libMediaSDK.framework (fisheye/ios/vendor),
+// no macOS slice.
+@property(nonatomic, strong) MediaSdkFisheyePlayer* _Nullable mediaSdkFisheyePlayer;
 #endif
 
 @property(nonatomic, strong) FlutterEventSink _Nullable eventSink;
