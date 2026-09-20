@@ -35,6 +35,7 @@ import com.cloudwebrtc.webrtc.record.FrameCapturer;
 import com.cloudwebrtc.webrtc.utils.AnyThreadResult;
 import com.cloudwebrtc.webrtc.utils.Callback;
 import com.cloudwebrtc.webrtc.utils.ConstraintsArray;
+import com.cloudwebrtc.webrtc.fisheye.MediaSdkFisheyePlayer;
 import com.cloudwebrtc.webrtc.utils.ConstraintsMap;
 import com.cloudwebrtc.webrtc.utils.EglUtils;
 import com.cloudwebrtc.webrtc.utils.ObjectType;
@@ -176,6 +177,7 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
 
   ExecutorService executor = Executors.newSingleThreadExecutor();
   Handler mainHandler = new Handler(Looper.getMainLooper());
+  final MediaSdkFisheyePlayer mediaSdkFisheyePlayer = new MediaSdkFisheyePlayer();
 
   public static LogSink logSink = new LogSink();
 
@@ -862,6 +864,36 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
         double tiltDeg = call.argument("tiltDeg");
         render.updateBaseTileOffset((float) panDeg, (float) tiltDeg);
         result.success(null);
+        break;
+      }
+      case "fisheyeMediaSdkStart": {
+        // MediaSDK_StartStream blocks until the RTSP session connects (or
+        // fails) -- matches the reference call sequence in fisheye/README.md
+        // (bAsync=BOOL_FALSE), so this must run off the platform thread.
+        String rtspUrl = call.argument("rtspUrl");
+        Integer ptzMode = call.argument("ptzMode");
+        Integer fixMode = call.argument("fixMode");
+        if (rtspUrl == null || ptzMode == null || fixMode == null) {
+          resultError("fisheyeMediaSdkStart", "rtspUrl/ptzMode/fixMode are required", result);
+          return;
+        }
+        executor.execute(() -> {
+          boolean started = mediaSdkFisheyePlayer.start(rtspUrl, ptzMode, fixMode);
+          mainHandler.post(() -> {
+            if (started) {
+              result.success(null);
+            } else {
+              resultError("fisheyeMediaSdkStart", "see logcat tag MediaSdkFisheyePlayer for the failing step", result);
+            }
+          });
+        });
+        break;
+      }
+      case "fisheyeMediaSdkStop": {
+        executor.execute(() -> {
+          mediaSdkFisheyePlayer.stop();
+          mainHandler.post(() -> result.success(null));
+        });
         break;
       }
       case "mediaStreamTrackHasTorch": {
