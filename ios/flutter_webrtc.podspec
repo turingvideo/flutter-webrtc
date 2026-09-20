@@ -16,6 +16,17 @@ A new flutter plugin project.
   s.public_header_files = 'flutter_webrtc/Sources/flutter_webrtc/include/flutter_webrtc/**/*.h'
   s.dependency 'Flutter'
   s.dependency 'WebRTC-SDK', '150.7871.01'
+  # Vendor MediaSDK spike (see ../fisheye/README.md) -- iOS only, no macOS
+  # slice was provided.
+  s.vendored_frameworks = [
+    '../fisheye/ios/vendor/Frameworks/libMediaSDK.framework',
+    '../fisheye/ios/vendor/Frameworks/libParser.framework',
+    '../fisheye/ios/vendor/Frameworks/libRtsp.framework',
+    '../fisheye/ios/vendor/Frameworks/libUHls.framework',
+    '../fisheye/ios/vendor/Frameworks/libURtmp.framework',
+    '../fisheye/ios/vendor/Frameworks/libEncrypt.framework',
+    '../fisheye/ios/vendor/Frameworks/libUmpeg.framework',
+  ]
   s.ios.deployment_target = '13.0'
   s.static_framework = true
   s.pod_target_xcconfig = {

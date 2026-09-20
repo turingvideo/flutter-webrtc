@@ -41,11 +41,34 @@ android {
         namespace 'com.cloudwebrtc.webrtc'
     }
     compileSdkVersion 36
+    // Flutter's Gradle plugin defaults every plugin subproject's
+    // android.ndkVersion independently of the app module's own override
+    // (app/build.gradle can set a different one for itself without this
+    // module inheriting it) -- externalNativeBuild below only started
+    // actually invoking NDK resolution once this module needed CMake, so
+    // pin explicitly to a version known to be installed rather than
+    // relying on whatever ndk.dir happens to point at.
+    ndkVersion "28.2.13676358"
 
     defaultConfig {
         minSdkVersion 21
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
         consumerProguardFiles 'proguard-rules.pro'
+        // Only the ABIs the vendor MediaSDK ships prebuilt .so's for (see
+        // fisheye/android/vendor/libs) -- without this filter Gradle would
+        // also try to package x86/x86_64 variants that don't exist and fail.
+        ndk {
+            abiFilters 'armeabi-v7a', 'arm64-v8a'
+        }
+    }
+
+    // JNI bridge to the vendor MediaSDK C API (fisheye/android/vendor) --
+    // see fisheye/android/src/main/cpp/mediasdk_jni.cpp and
+    // MediaSdkFisheyePlayer.java.
+    externalNativeBuild {
+        cmake {
+            path '../fisheye/android/src/main/cpp/CMakeLists.txt'
+        }
     }
 
     lintOptions {
@@ -66,6 +89,9 @@ android {
     sourceSets {
         main {
             java.srcDirs += '../fisheye/android/src/main/java'
+            // Vendor MediaSDK prebuilt .so's (libMediaSDK.so + its own
+            // runtime dependencies) packaged straight into the APK per ABI.
+            jniLibs.srcDirs += '../fisheye/android/vendor/libs'
         }
     }
 }
