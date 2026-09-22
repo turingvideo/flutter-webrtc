@@ -2,6 +2,7 @@
 
 #import <libMediaSDK/media_sdk_func.h>
 #import <string.h>
+#import <os/lock.h>
 
 // MEDIASDK_VIDEO_CB_TYPE_E's "processed/corrected data" value -- see
 // fisheye/README.md step 4 and mediasdk_jni.cpp's matching constant on
@@ -9,10 +10,105 @@
 // drop, hardcoded here exactly as the vendor's own sample does (`= 1`).
 static const ULONG_32 kMediaSdkVideoCbProcessedData = 1;
 
+// Pulls "user" and "pass" out of an rtsp://user:pass@host:port/path URL,
+// if present. Mirrors ExtractUrlCredentials in mediasdk_jni.cpp exactly
+// -- see that function's doc for why this is called explicitly even
+// though the URL already carries the credentials.
+static BOOL ExtractUrlCredentials(NSString *url, NSString **user, NSString **pass) {
+  NSRange schemeRange = [url rangeOfString:@"://"];
+  if (schemeRange.location == NSNotFound) return NO;
+  NSUInteger authorityStart = schemeRange.location + schemeRange.length;
+  NSRange atRange = [url rangeOfString:@"@" options:0
+                                  range:NSMakeRange(authorityStart, url.length - authorityStart)];
+  if (atRange.location == NSNotFound) return NO;
+  NSString *credentials = [url substringWithRange:NSMakeRange(authorityStart,
+                                                                atRange.location - authorityStart)];
+  NSRange colonRange = [credentials rangeOfString:@":"];
+  if (colonRange.location == NSNotFound) return NO;
+  *user = [credentials substringToIndex:colonRange.location];
+  *pass = [credentials substringFromIndex:colonRange.location + colonRange.length];
+  return YES;
+}
+
+// Pulls "host" and "port" (0 if absent) out of an
+// rtsp://[user:pass@]host[:port]/path URL. Mirrors ExtractUrlHostPort in
+// mediasdk_jni.cpp exactly -- see that function's doc for why
+// pcServerIp/usServerPort are filled even for a plain local connection.
+static BOOL ExtractUrlHostPort(NSString *url, NSString **host, int *port) {
+  NSRange schemeRange = [url rangeOfString:@"://"];
+  if (schemeRange.location == NSNotFound) return NO;
+  NSUInteger authorityStart = schemeRange.location + schemeRange.length;
+  NSRange atRange = [url rangeOfString:@"@" options:0
+                                  range:NSMakeRange(authorityStart, url.length - authorityStart)];
+  NSUInteger hostStart =
+      (atRange.location != NSNotFound) ? atRange.location + atRange.length : authorityStart;
+  NSRange pathRange = [url rangeOfString:@"/" options:0
+                                    range:NSMakeRange(hostStart, url.length - hostStart)];
+  NSString *authority = (pathRange.location != NSNotFound)
+      ? [url substringWithRange:NSMakeRange(hostStart, pathRange.location - hostStart)]
+      : [url substringFromIndex:hostStart];
+  NSRange colonRange = [authority rangeOfString:@":"];
+  if (colonRange.location == NSNotFound) {
+    *host = authority;
+    *port = 0;
+  } else {
+    *host = [authority substringToIndex:colonRange.location];
+    *port = [[authority substringFromIndex:colonRange.location + colonRange.length] intValue];
+  }
+  return host->length > 0;
+}
+
+static inline uint8_t ClampU8(int value) {
+  return (uint8_t)(value < 0 ? 0 : (value > 255 ? 255 : value));
+}
+
+// BT.601 full-range YUV -> BGRA, matching the same math as
+// BLIT_YUV_FRAGMENT_SHADER (DewarpGlDrawer.java) and
+// kPanoramaWarpKernelSource, just scaled for 8-bit ints instead of GLSL
+// floats. width/height are the luma plane's; u/v are 4:2:0 subsampled
+// (half resolution, rounded up) with their own strides.
+static void ConvertYuv420ToBgra(const uint8_t *y, int strideY, const uint8_t *u, int strideU,
+                                 const uint8_t *v, int strideV, int width, int height,
+                                 uint8_t *dst, size_t dstStride) {
+  for (int row = 0; row < height; row++) {
+    const uint8_t *yRow = y + (size_t)row * strideY;
+    const uint8_t *uRow = u + (size_t)(row / 2) * strideU;
+    const uint8_t *vRow = v + (size_t)(row / 2) * strideV;
+    uint8_t *dstRow = dst + (size_t)row * dstStride;
+    for (int col = 0; col < width; col++) {
+      int Y = yRow[col];
+      int U = uRow[col / 2] - 128;
+      int V = vRow[col / 2] - 128;
+      int r = Y + (1403 * V) / 1000;
+      int g = Y - (344 * U + 714 * V) / 1000;
+      int b = Y + (1770 * U) / 1000;
+      uint8_t *px = dstRow + (size_t)col * 4;
+      px[0] = ClampU8(b);
+      px[1] = ClampU8(g);
+      px[2] = ClampU8(r);
+      px[3] = 255;
+    }
+  }
+}
+
 @implementation MediaSdkFisheyePlayer {
   ULONG_32 _port;
   BOOL _hasPort;
   unsigned long long _frameCount;
+
+  id<FlutterTextureRegistry> _textureRegistry;
+  int64_t _textureId;
+  CVPixelBufferRef _pixelBufferRef;
+  os_unfair_lock _pixelLock;
+}
+
+- (instancetype)init {
+  self = [super init];
+  if (self) {
+    _pixelLock = OS_UNFAIR_LOCK_INIT;
+    _textureId = -1;
+  }
+  return self;
 }
 
 static BOOL sSdkInited = NO;
@@ -45,20 +141,92 @@ static void OnDecodeVideoData(ULONG_32 ulPort,
 - (void)handleDecodedFrame:(const MEDIASDK_DECODE_VIDEO_RAW_S *)frame port:(ULONG_32)port {
   _frameCount++;
   FlutterEventSink sink = self.eventSink;
-  if (!sink) {
+  if (sink) {
+    NSDictionary *event = @{
+      @"event" : @"onFisheyeMediaSdkFrame",
+      @"port" : @(port),
+      @"width" : @(frame->ulPicWidth),
+      @"height" : @(frame->ulPicHeight),
+      @"dataType" : @(frame->eDataType),
+      @"frameCount" : @(_frameCount),
+    };
+    dispatch_async(dispatch_get_main_queue(), ^{
+      sink(event);
+    });
+  }
+
+  if (_textureId < 0 || _textureRegistry == nil) {
     return;
   }
-  NSDictionary *event = @{
-    @"event" : @"onFisheyeMediaSdkFrame",
-    @"port" : @(port),
-    @"width" : @(frame->ulPicWidth),
-    @"height" : @(frame->ulPicHeight),
-    @"dataType" : @(frame->eDataType),
-    @"frameCount" : @(_frameCount),
-  };
+  // MEDIASDK_VIDEO_RAW_YUV420 (dataType 0) is the only format this path
+  // understands; matches what startWithRtspUrl:... always gets (see
+  // fisheyeMediaSdkStart's Android counterpart doc).
+  if (frame->eDataType != 0) {
+    return;
+  }
+
+  int width = (int)frame->ulPicWidth;
+  int height = (int)frame->ulPicHeight;
+
+  CVPixelBufferRef newBuffer = NULL;
+  NSDictionary *attrs = @{(id)kCVPixelBufferIOSurfacePropertiesKey : @{}};
+  CVPixelBufferCreate(kCFAllocatorDefault, width, height, kCVPixelFormatType_32BGRA,
+                      (__bridge CFDictionaryRef)attrs, &newBuffer);
+  if (newBuffer == NULL) {
+    return;
+  }
+
+  CVPixelBufferLockBaseAddress(newBuffer, 0);
+  uint8_t *dst = (uint8_t *)CVPixelBufferGetBaseAddress(newBuffer);
+  size_t dstStride = CVPixelBufferGetBytesPerRow(newBuffer);
+  ConvertYuv420ToBgra(frame->pucData[0], frame->ulLineSize[0], frame->pucData[1],
+                      frame->ulLineSize[1], frame->pucData[2], frame->ulLineSize[2], width, height,
+                      dst, dstStride);
+  CVPixelBufferUnlockBaseAddress(newBuffer, 0);
+
+  os_unfair_lock_lock(&_pixelLock);
+  CVPixelBufferRef old = _pixelBufferRef;
+  _pixelBufferRef = newBuffer;
+  os_unfair_lock_unlock(&_pixelLock);
+  if (old != NULL) {
+    CVBufferRelease(old);
+  }
+
+  id<FlutterTextureRegistry> registry = _textureRegistry;
+  int64_t textureId = _textureId;
   dispatch_async(dispatch_get_main_queue(), ^{
-    sink(event);
+    [registry textureFrameAvailable:textureId];
   });
+}
+
+- (CVPixelBufferRef)copyPixelBuffer {
+  os_unfair_lock_lock(&_pixelLock);
+  CVPixelBufferRef buffer = _pixelBufferRef != NULL ? CVBufferRetain(_pixelBufferRef) : NULL;
+  os_unfair_lock_unlock(&_pixelLock);
+  return buffer;
+}
+
+- (int64_t)createTextureWithRegistry:(id<FlutterTextureRegistry>)registry {
+  [self disposeTexture];
+  _textureRegistry = registry;
+  _textureId = [registry registerTexture:self];
+  return _textureId;
+}
+
+- (void)disposeTexture {
+  if (_textureId >= 0 && _textureRegistry != nil) {
+    [_textureRegistry unregisterTexture:_textureId];
+  }
+  _textureId = -1;
+  _textureRegistry = nil;
+
+  os_unfair_lock_lock(&_pixelLock);
+  CVPixelBufferRef old = _pixelBufferRef;
+  _pixelBufferRef = NULL;
+  os_unfair_lock_unlock(&_pixelLock);
+  if (old != NULL) {
+    CVBufferRelease(old);
+  }
 }
 
 - (BOOL)startWithRtspUrl:(NSString *)rtspUrl ptzMode:(NSUInteger)ptzMode fixMode:(NSUInteger)fixMode {
@@ -99,6 +267,14 @@ static void OnDecodeVideoData(ULONG_32 ulPort,
     return NO;
   }
 
+  NSString *user, *pass;
+  if (ExtractUrlCredentials(rtspUrl, &user, &pass)) {
+    ULONG_32 credRc =
+        MediaSDK_SetUserPassword(_port, (CHAR *)[user UTF8String], (CHAR *)[pass UTF8String]);
+    NSLog(@"[MediaSdkFisheyePlayer] MediaSDK_SetUserPassword user=%@ rc=%u", user,
+          (unsigned int)credRc);
+  }
+
   MEDIASDK_RTSP_REALPLAY_S stRealPlay;
   memset(&stRealPlay, 0, sizeof(stRealPlay));
   stRealPlay.enRtspType = MEDIASDK_RTSP_RTP_TCP;
@@ -106,6 +282,19 @@ static void OnDecodeVideoData(ULONG_32 ulPort,
   stRealPlay.enStreamMode = MEDIASDK_RTSP_MODE_ONLY_VIDEO;
   stRealPlay.pcURL = (CHAR *)[rtspUrl UTF8String];
   stRealPlay.pWnd = NULL;  // no display window -- see class doc.
+
+  NSString *host;
+  int urlPort = 0;
+  // See ExtractUrlHostPort's doc -- a real-device test on Android showed
+  // this build requires pcServerIp/usServerPort even for a plain local
+  // connection, despite the header doc implying they're only for
+  // cross-network/P2P use. Untested in isolation on iOS specifically,
+  // but applying the same fix here keeps the two platforms in sync
+  // rather than waiting to hit the identical failure separately.
+  if (ExtractUrlHostPort(rtspUrl, &host, &urlPort)) {
+    stRealPlay.pcServerIp = (CHAR *)[host UTF8String];
+    stRealPlay.usServerPort = (USHORT)(urlPort != 0 ? urlPort : 554);
+  }
 
   rc = MediaSDK_StartStream(_port, MEDIASDK_STREAM_RTSP_REALPLAY, &stRealPlay, BOOL_FALSE);
   if (rc != ERR_MEDIASDK_SUCCEED) {
