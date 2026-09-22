@@ -70,9 +70,11 @@ class MediaSdkFisheyeFrameEvent {
 /// This is a standalone spike, not wired into [RTCVideoRenderer] or
 /// [WebrtcPlayerController] -- it exists to prove the pipeline (RTSP in,
 /// SDK does its own decode + fisheye correction, corrected YUV out) runs
-/// at all before building the GPU-upload-to-Flutter-Texture rendering
-/// path on top of it. [onFrame] fires once per corrected frame the native
-/// callback observes; there is intentionally no on-screen video yet.
+/// at all. [onFrame] fires once per corrected frame the native callback
+/// observes, independent of whether a texture is attached via
+/// [createTexture]. Rendering (Android only so far) reuses WebRTC's own
+/// EGL pipeline (SurfaceTextureRenderer) rather than a new GL setup --
+/// see MediaSdkFisheyePlayer.java's class doc.
 ///
 /// Native-only (Android/iOS): a no-op everywhere else.
 class MediaSdkFisheyePlayer {
@@ -115,6 +117,24 @@ class MediaSdkFisheyePlayer {
   Future<void> stop() async {
     if (!(WebRTC.platformIsAndroid || WebRTC.platformIsIOS)) return;
     await WebRTC.invokeMethod('fisheyeMediaSdkStop', <String, dynamic>{});
+  }
+
+  /// Creates a Flutter [Texture] to display corrected frames on, and
+  /// returns its textureId (pass straight to a `Texture(textureId: ...)`
+  /// widget). Can be called before or after [start] -- frames just have
+  /// nowhere to go until this exists. Android only right now.
+  Future<int?> createTexture() async {
+    if (!WebRTC.platformIsAndroid) return null;
+    final response = await WebRTC.invokeMethod(
+      'fisheyeMediaSdkCreateTexture',
+      <String, dynamic>{},
+    );
+    return response['textureId'] as int?;
+  }
+
+  Future<void> disposeTexture() async {
+    if (!WebRTC.platformIsAndroid) return;
+    await WebRTC.invokeMethod('fisheyeMediaSdkDisposeTexture', <String, dynamic>{});
   }
 
   Future<void> dispose() async {
