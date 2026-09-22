@@ -1464,6 +1464,7 @@ typedef struct tagMediaSDKHlsPlayBackS
     CHAR *pcM3u8;                                       /* 设置要播放的录像段的m3u8信息，填NULL为缺省，延后设置 */
     TIME_T tiSeekTime;                                  /* 要播放的时间点（单位：s），填0为缺省 */
     TIME_T tiEndTime;                                   /* 播放终止时间点（单位：s），填0为缺省 */
+    LONG_REAL lUserParam;                               /* 事件上报用户参数 */
 }MEDIASDK_HLS_PLAYBACK_S;
 
 

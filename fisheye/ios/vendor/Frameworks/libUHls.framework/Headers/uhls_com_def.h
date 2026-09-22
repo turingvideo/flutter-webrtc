@@ -81,6 +81,7 @@ typedef struct tagUHlsTSPacketS
 typedef struct tagUHlsReportMsgS
 {
     UHLS_EVENT_E eEvent;        /* 事件码 */
+    DULONG      dulReserved;    /* 保留参数（携带数值型附加信息） */
     CONST CHAR* pcDescription;  /* 事件内容描述 */
 }UHLS_REPORT_MSG_S;
 
