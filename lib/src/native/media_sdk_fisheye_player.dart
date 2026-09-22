@@ -72,9 +72,12 @@ class MediaSdkFisheyeFrameEvent {
 /// SDK does its own decode + fisheye correction, corrected YUV out) runs
 /// at all. [onFrame] fires once per corrected frame the native callback
 /// observes, independent of whether a texture is attached via
-/// [createTexture]. Rendering (Android only so far) reuses WebRTC's own
-/// EGL pipeline (SurfaceTextureRenderer) rather than a new GL setup --
-/// see MediaSdkFisheyePlayer.java's class doc.
+/// [createTexture]. Rendering is native-only on both platforms but takes
+/// different shapes: Android reuses WebRTC's own EGL pipeline
+/// (SurfaceTextureRenderer, push-based); iOS implements <FlutterTexture>
+/// directly and converts each frame to a BGRA CVPixelBuffer (pull-based,
+/// matching how Flutter's iOS texture registry itself works) -- see
+/// MediaSdkFisheyePlayer's class doc on each platform.
 ///
 /// Native-only (Android/iOS): a no-op everywhere else.
 class MediaSdkFisheyePlayer {
@@ -122,9 +125,9 @@ class MediaSdkFisheyePlayer {
   /// Creates a Flutter [Texture] to display corrected frames on, and
   /// returns its textureId (pass straight to a `Texture(textureId: ...)`
   /// widget). Can be called before or after [start] -- frames just have
-  /// nowhere to go until this exists. Android only right now.
+  /// nowhere to go until this exists.
   Future<int?> createTexture() async {
-    if (!WebRTC.platformIsAndroid) return null;
+    if (!(WebRTC.platformIsAndroid || WebRTC.platformIsIOS)) return null;
     final response = await WebRTC.invokeMethod(
       'fisheyeMediaSdkCreateTexture',
       <String, dynamic>{},
@@ -133,7 +136,7 @@ class MediaSdkFisheyePlayer {
   }
 
   Future<void> disposeTexture() async {
-    if (!WebRTC.platformIsAndroid) return;
+    if (!(WebRTC.platformIsAndroid || WebRTC.platformIsIOS)) return;
     await WebRTC.invokeMethod('fisheyeMediaSdkDisposeTexture', <String, dynamic>{});
   }
 

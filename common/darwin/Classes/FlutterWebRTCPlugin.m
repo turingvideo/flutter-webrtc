@@ -1164,6 +1164,15 @@ static void FlutterWebRTCApplyFieldTrials(void) {
         result(nil);
       });
     });
+  } else if ([@"fisheyeMediaSdkCreateTexture" isEqualToString:call.method]) {
+    if (!self.mediaSdkFisheyePlayer) {
+      self.mediaSdkFisheyePlayer = [[MediaSdkFisheyePlayer alloc] init];
+    }
+    int64_t textureId = [self.mediaSdkFisheyePlayer createTextureWithRegistry:_textures];
+    result(@{@"textureId" : @(textureId)});
+  } else if ([@"fisheyeMediaSdkDisposeTexture" isEqualToString:call.method]) {
+    [self.mediaSdkFisheyePlayer disposeTexture];
+    result(nil);
   }
 #endif
 #if TARGET_OS_IPHONE || TARGET_OS_OSX
