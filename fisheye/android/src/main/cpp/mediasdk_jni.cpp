@@ -20,7 +20,8 @@ namespace {
 
 JavaVM* g_vm = nullptr;
 jclass g_playerClass = nullptr;      // global ref to MediaSdkFisheyePlayer
-jmethodID g_onFrameMethod = nullptr; // static void onFrame(int,int,int,int,long)
+// static void onFrame(int,int,int,int,long,ByteBuffer,int,ByteBuffer,int,ByteBuffer,int)
+jmethodID g_onFrameMethod = nullptr;
 
 // MEDIASDK_VIDEO_CB_TYPE_E's "processed/corrected data" value -- see
 // fisheye/README.md step 4. Not spelled out as a symbol in the header
@@ -115,12 +116,34 @@ void STDCALL OnDecodeVideoData(ULONG_32 ulPort,
   JNIEnv* env = AttachCurrentThreadIfNeeded(&didAttach);
   if (env == nullptr) return;
 
+  // Direct ByteBuffers are plain views over MediaSDK's own native
+  // memory -- no copy happens here. MediaSdkFisheyePlayer.onFrame()
+  // copies out of them synchronously before this call returns, per the
+  // SDK's own "process promptly" contract for this callback, so it's
+  // safe for these views to go stale immediately afterward.
+  ULONG_32 width = pDecodeVideoData->ulPicWidth;
+  ULONG_32 height = pDecodeVideoData->ulPicHeight;
+  ULONG_32 chromaHeight = (height + 1) / 2;
+  jobject bufY = env->NewDirectByteBuffer(
+      pDecodeVideoData->pucData[0], pDecodeVideoData->ulLineSize[0] * height);
+  jobject bufU = env->NewDirectByteBuffer(
+      pDecodeVideoData->pucData[1], pDecodeVideoData->ulLineSize[1] * chromaHeight);
+  jobject bufV = env->NewDirectByteBuffer(
+      pDecodeVideoData->pucData[2], pDecodeVideoData->ulLineSize[2] * chromaHeight);
+
   env->CallStaticVoidMethod(g_playerClass, g_onFrameMethod,
                              static_cast<jint>(ulPort),
-                             static_cast<jint>(pDecodeVideoData->ulPicWidth),
-                             static_cast<jint>(pDecodeVideoData->ulPicHeight),
+                             static_cast<jint>(width),
+                             static_cast<jint>(height),
                              static_cast<jint>(pDecodeVideoData->eDataType),
-                             static_cast<jlong>(frameCount));
+                             static_cast<jlong>(frameCount),
+                             bufY, static_cast<jint>(pDecodeVideoData->ulLineSize[0]),
+                             bufU, static_cast<jint>(pDecodeVideoData->ulLineSize[1]),
+                             bufV, static_cast<jint>(pDecodeVideoData->ulLineSize[2]));
+
+  env->DeleteLocalRef(bufY);
+  env->DeleteLocalRef(bufU);
+  env->DeleteLocalRef(bufV);
 
   if (didAttach) {
     g_vm->DetachCurrentThread();
@@ -141,9 +164,11 @@ extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
     return JNI_ERR;
   }
   g_playerClass = reinterpret_cast<jclass>(env->NewGlobalRef(localClass));
-  g_onFrameMethod = env->GetStaticMethodID(g_playerClass, "onFrame", "(IIIIJ)V");
+  g_onFrameMethod = env->GetStaticMethodID(
+      g_playerClass, "onFrame",
+      "(IIIIJLjava/nio/ByteBuffer;ILjava/nio/ByteBuffer;ILjava/nio/ByteBuffer;I)V");
   if (g_onFrameMethod == nullptr) {
-    LOGE("Could not find MediaSdkFisheyePlayer.onFrame(IIIIJ)V");
+    LOGE("Could not find MediaSdkFisheyePlayer.onFrame(...)");
     return JNI_ERR;
   }
   return JNI_VERSION_1_6;
