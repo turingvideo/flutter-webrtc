@@ -6,6 +6,9 @@
 #include <jni.h>
 #include <android/log.h>
 #include <string.h>
+#include <stdlib.h>
+
+#include <string>
 
 #include "media_sdk_func.h"
 
@@ -24,6 +27,57 @@ jmethodID g_onFrameMethod = nullptr; // static void onFrame(int,int,int,int,long
 // under that exact name in this SDK drop, so it's hardcoded here exactly
 // as the vendor's own sample does (`= 1`).
 constexpr ULONG_32 kMediaSdkVideoCbProcessedData = 1;
+
+// Pulls "user:pass" out of an rtsp://user:pass@host:port/path URL, if
+// present. MediaSDK_SetUserPassword's doc says it's only needed "when the
+// stream needs credentials AND they weren't carried via the start-stream
+// URL" -- since we do embed them in the URL already, this call should be
+// redundant in theory, but calling it explicitly anyway costs nothing and
+// hedges against a URL-credential-parsing edge case in that code path.
+bool ExtractUrlCredentials(const std::string& url, std::string* user, std::string* pass) {
+  size_t schemeEnd = url.find("://");
+  if (schemeEnd == std::string::npos) return false;
+  size_t authorityStart = schemeEnd + 3;
+  size_t at = url.find('@', authorityStart);
+  if (at == std::string::npos) return false;
+  std::string credentials = url.substr(authorityStart, at - authorityStart);
+  size_t colon = credentials.find(':');
+  if (colon == std::string::npos) return false;
+  *user = credentials.substr(0, colon);
+  *pass = credentials.substr(colon + 1);
+  return true;
+}
+
+// Pulls "host" and "port" (0 if absent) out of an
+// rtsp://[user:pass@]host[:port]/path URL. MEDIASDK_RTSP_REALPLAY_S's
+// pcServerIp/usServerPort are documented as "pass in when crossing
+// networks (including P2P)", implying they're optional for a plain local
+// connection -- but a real-device test showed CheckPort logging
+// "pstParam->pcServerIp Is NULL" immediately before MediaSDK_StartStream
+// fails with 0x11d2a, so this build appears to require them unconditionally.
+// Filling them with the same host/port already in the URL costs nothing
+// and matches what a "cross-net" caller would have passed for a directly
+// reachable device anyway.
+bool ExtractUrlHostPort(const std::string& url, std::string* host, int* port) {
+  size_t schemeEnd = url.find("://");
+  if (schemeEnd == std::string::npos) return false;
+  size_t authorityStart = schemeEnd + 3;
+  size_t at = url.find('@', authorityStart);
+  size_t hostStart = (at != std::string::npos) ? at + 1 : authorityStart;
+  size_t pathStart = url.find('/', hostStart);
+  std::string authority = (pathStart != std::string::npos)
+      ? url.substr(hostStart, pathStart - hostStart)
+      : url.substr(hostStart);
+  size_t colon = authority.find(':');
+  if (colon == std::string::npos) {
+    *host = authority;
+    *port = 0;
+  } else {
+    *host = authority.substr(0, colon);
+    *port = atoi(authority.substr(colon + 1).c_str());
+  }
+  return !host->empty();
+}
 
 JNIEnv* AttachCurrentThreadIfNeeded(bool* didAttach) {
   JNIEnv* env = nullptr;
@@ -162,6 +216,18 @@ Java_com_cloudwebrtc_webrtc_fisheye_MediaSdkFisheyePlayer_nativeStartRtspStream(
                                                                                  jstring rtspUrl) {
   const char* url = env->GetStringUTFChars(rtspUrl, nullptr);
 
+  std::string user, pass;
+  if (ExtractUrlCredentials(url, &user, &pass)) {
+    ULONG_32 credRc = MediaSDK_SetUserPassword(static_cast<ULONG_32>(port),
+                                                const_cast<char*>(user.c_str()),
+                                                const_cast<char*>(pass.c_str()));
+    LOGI("MediaSDK_SetUserPassword port=%d user=%s rc=%u", port, user.c_str(), credRc);
+  }
+
+  std::string host;
+  int urlPort = 0;
+  ExtractUrlHostPort(url, &host, &urlPort);
+
   MEDIASDK_RTSP_REALPLAY_S stRealPlay;
   memset(&stRealPlay, 0, sizeof(stRealPlay));
   stRealPlay.enRtspType = MEDIASDK_RTSP_RTP_TCP;
@@ -169,6 +235,10 @@ Java_com_cloudwebrtc_webrtc_fisheye_MediaSdkFisheyePlayer_nativeStartRtspStream(
   stRealPlay.enStreamMode = MEDIASDK_RTSP_MODE_ONLY_VIDEO;
   stRealPlay.pcURL = const_cast<char*>(url);
   stRealPlay.pWnd = nullptr;  // no display window -- see MediaSdkFisheyePlayer's doc.
+  if (!host.empty()) {
+    stRealPlay.pcServerIp = const_cast<char*>(host.c_str());
+    stRealPlay.usServerPort = static_cast<USHORT>(urlPort != 0 ? urlPort : 554);
+  }
 
   ULONG_32 rc = MediaSDK_StartStream(static_cast<ULONG_32>(port), MEDIASDK_STREAM_RTSP_REALPLAY,
                                       &stRealPlay, BOOL_FALSE);
