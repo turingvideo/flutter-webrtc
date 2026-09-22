@@ -888,6 +888,21 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
         });
         break;
       }
+      case "fisheyeMediaSdkCreateTexture": {
+        // SurfaceTextureRenderer.init() asserts it's on the main thread,
+        // so this stays on the platform thread (method calls already
+        // arrive on it) unlike the start/stop cases above.
+        long textureId = MediaSdkFisheyePlayer.createTexture(textures);
+        ConstraintsMap params = new ConstraintsMap();
+        params.putInt("textureId", (int) textureId);
+        result.success(params.toMap());
+        break;
+      }
+      case "fisheyeMediaSdkDisposeTexture": {
+        MediaSdkFisheyePlayer.disposeTexture();
+        result.success(null);
+        break;
+      }
       case "mediaStreamTrackHasTorch": {
         String trackId = call.argument("trackId");
         cameraUtils.hasTorch(trackId, result);
