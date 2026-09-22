@@ -1528,6 +1528,20 @@ MEDIASDK_EXPORT ULONG_32 STDCALL MediaSDK_InputData(IN ULONG_32 ulPort, IN VOID 
  */
 MEDIASDK_EXPORT ULONG_32 STDCALL MediaSDK_CloseInputStream(IN ULONG_32 ulPort);
 
+/**
+* 设置信号量名称 \n
+* @param [IN] CHAR* pcSignalName     信号量名称
+* @return 返回如下结果：
+* -         ERR_MEDIASDK_SUCCEED         成功
+* -         ERR_MEDIASDK_NOT_SUPPORT     当前平台不支持
+* -         ERR_MEDIASDK_NULL_PTR        参数为空
+* @note  
+* -    1) 该接口仅macOS平台有效，其他平台返回ERR_MEDIASDK_NOT_SUPPORT
+* -    2) 用于设置底层同步事件名称前缀，避免多进程同名冲突
+* -    3) 必须在MediaSDK_Init之后、MediaSDK_StartStream之前调用，之后调用不生效
+*/
+MEDIASDK_EXPORT ULONG_32 STDCALL MediaSDK_SetSignalName(IN CHAR* pcSignalName);
+
 #ifdef  __cplusplus
 }
 #endif /* end of __cplusplus */
