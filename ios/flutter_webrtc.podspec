@@ -16,22 +16,19 @@ A new flutter plugin project.
   s.public_header_files = 'flutter_webrtc/Sources/flutter_webrtc/include/flutter_webrtc/**/*.h'
   s.dependency 'Flutter'
   s.dependency 'WebRTC-SDK', '150.7871.01'
-  # Vendor MediaSDK spike (see ../fisheye/README.md) -- iOS only, no macOS
-  # slice was provided.
-  s.vendored_frameworks = [
-    '../fisheye/ios/vendor/Frameworks/libMediaSDK.framework',
-    '../fisheye/ios/vendor/Frameworks/libParser.framework',
-    '../fisheye/ios/vendor/Frameworks/libRtsp.framework',
-    '../fisheye/ios/vendor/Frameworks/libUHls.framework',
-    '../fisheye/ios/vendor/Frameworks/libURtmp.framework',
-    '../fisheye/ios/vendor/Frameworks/libEncrypt.framework',
-    '../fisheye/ios/vendor/Frameworks/libUmpeg.framework',
-  ]
+  # Vendor MediaSDK spike (see ../fisheye/README.md) -- carried by a
+  # separate pod (../fisheye/ios/FisheyeMediaSDK.podspec) rather than
+  # vendored_frameworks directly on this podspec, because CocoaPods does
+  # not correctly link/embed a pod's own vendored_frameworks when that
+  # pod has static_framework = true (set a few lines up) -- see that
+  # podspec's doc for how this was confirmed and what the consuming app's
+  # Podfile needs.
+  s.dependency 'FisheyeMediaSDK'
   s.ios.deployment_target = '13.0'
   s.static_framework = true
   s.pod_target_xcconfig = {
     'CLANG_CXX_LANGUAGE_STANDARD' => 'c++14',
-    'USER_HEADER_SEARCH_PATHS' => '"${PODS_TARGET_SRCROOT}/flutter_webrtc/Sources/flutter_webrtc/include/flutter_webrtc"'
+    'USER_HEADER_SEARCH_PATHS' => '"${PODS_TARGET_SRCROOT}/flutter_webrtc/Sources/flutter_webrtc/include/flutter_webrtc" "${PODS_TARGET_SRCROOT}/../fisheye/ios/vendor/include"'
   }
   s.libraries = 'c++'
 end

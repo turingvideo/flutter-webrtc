@@ -1,6 +1,16 @@
 #import "MediaSdkFisheyePlayer.h"
 
-#import <libMediaSDK/media_sdk_func.h>
+// Quote-style + an explicit header search path (see
+// ../../ios/flutter_webrtc.podspec's USER_HEADER_SEARCH_PATHS) rather than
+// <libMediaSDK/media_sdk_func.h> framework-style angle brackets -- the
+// latter didn't resolve on a real device build even with libMediaSDK.framework
+// declared as a vendored_framework (presumably needs a module map this
+// plain Headers-folder framework bundle doesn't have). The vendor's C
+// headers are otherwise identical whether read from inside the framework
+// bundle or the flat fisheye/ios/vendor/include copy (see
+// fisheye/android/vendor/include's copy, diffed byte-identical when this
+// SDK drop was imported).
+#import "media_sdk_func.h"
 #import <string.h>
 #import <os/lock.h>
 
@@ -55,7 +65,7 @@ static BOOL ExtractUrlHostPort(NSString *url, NSString **host, int *port) {
     *host = [authority substringToIndex:colonRange.location];
     *port = [[authority substringFromIndex:colonRange.location + colonRange.length] intValue];
   }
-  return host->length > 0;
+  return (*host).length > 0;
 }
 
 static inline uint8_t ClampU8(int value) {
