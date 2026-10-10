@@ -13,6 +13,8 @@
 #import "media_sdk_func.h"
 #import <string.h>
 #import <os/lock.h>
+#import <arpa/inet.h>
+#import <netdb.h>
 
 // MEDIASDK_VIDEO_CB_TYPE_E's "processed/corrected data" value -- see
 // fisheye/README.md step 4 and mediasdk_jni.cpp's matching constant on
@@ -66,6 +68,36 @@ static BOOL ExtractUrlHostPort(NSString *url, NSString **host, int *port) {
     *port = [[authority substringFromIndex:colonRange.location + colonRange.length] intValue];
   }
   return (*host).length > 0;
+}
+
+// pcServerIp is named (and, per a real-device Android test against a
+// hostname-based cloud RTSP URL, apparently treated) as a literal
+// dotted-decimal IPv4 address -- passing a hostname straight through
+// connects fine for a LAN-camera URL (whose "host" already is an IP) but
+// fails for a real domain like dev-srs.turingvideo.com with ENETUNREACH
+// deep in the vendor SDK's own socket layer, since it never resolves the
+// string itself. This does that resolution ourselves via the platform's
+// regular DNS. Mirrors ResolveHostToIp in mediasdk_jni.cpp exactly. A
+// literal-IP host round-trips through getaddrinfo/inet_ntop unchanged, so
+// this is safe to call unconditionally rather than only for hostnames.
+static BOOL ResolveHostToIp(NSString *host, NSString **ip) {
+  struct addrinfo hints;
+  memset(&hints, 0, sizeof(hints));
+  hints.ai_family = AF_INET;
+  hints.ai_socktype = SOCK_STREAM;
+  struct addrinfo *result = NULL;
+  int rc = getaddrinfo(host.UTF8String, NULL, &hints, &result);
+  if (rc != 0 || result == NULL) {
+    NSLog(@"[MediaSdkFisheyePlayer] getaddrinfo(%@) failed: %s", host, gai_strerror(rc));
+    return NO;
+  }
+  char buf[INET_ADDRSTRLEN] = {0};
+  struct sockaddr_in *addr = (struct sockaddr_in *)result->ai_addr;
+  const char *formatted = inet_ntop(AF_INET, &addr->sin_addr, buf, sizeof(buf));
+  freeaddrinfo(result);
+  if (formatted == NULL) return NO;
+  *ip = [NSString stringWithUTF8String:buf];
+  return YES;
 }
 
 static inline uint8_t ClampU8(int value) {
@@ -123,10 +155,25 @@ static void ConvertYuv420ToBgra(const uint8_t *y, int strideY, const uint8_t *u,
 
 static BOOL sSdkInited = NO;
 
+// Forwards MediaSDK's internal debug log via NSLog. Per media_sdk_func.h's
+// doc on MediaSDK_SetWriteLogCB: "if the caller doesn't register this
+// callback, the SDK records no internal log information at all" -- mirrors
+// MediaSdkWriteLogCallback in mediasdk_jni.cpp exactly.
+static void MediaSdkWriteLogCallback(ULONG_32 logLevel, ULONG_32 errCode, ULONG_32 cmdModuleId,
+                                      const CHAR *fileName, ULONG_32 fileLine,
+                                      const CHAR *logDescription) {
+  NSLog(@"[MediaSdkFisheyePlayer][MediaSDK-CB] level=%u err=0x%x module=%u %s:%u %s",
+        (unsigned int)logLevel, (unsigned int)errCode, (unsigned int)cmdModuleId,
+        fileName ? fileName : "", (unsigned int)fileLine, logDescription ? logDescription : "");
+}
+
 + (BOOL)ensureInited {
   if (sSdkInited) {
     return YES;
   }
+  // Must be called before any other MediaSDK function per its own doc.
+  ULONG_32 logRc = MediaSDK_SetWriteLogCB(MediaSdkWriteLogCallback, MEDIASDK_LOG_DEBUG);
+  NSLog(@"[MediaSdkFisheyePlayer] MediaSDK_SetWriteLogCB rc=%u", (unsigned int)logRc);
   ULONG_32 rc = MediaSDK_Init();
   sSdkInited = (rc == ERR_MEDIASDK_SUCCEED);
   if (!sSdkInited) {
@@ -302,6 +349,14 @@ static void OnDecodeVideoData(ULONG_32 ulPort,
   // but applying the same fix here keeps the two platforms in sync
   // rather than waiting to hit the identical failure separately.
   if (ExtractUrlHostPort(rtspUrl, &host, &urlPort)) {
+    NSString *resolvedIp;
+    if (ResolveHostToIp(host, &resolvedIp)) {
+      NSLog(@"[MediaSdkFisheyePlayer] Resolved host=%@ to ip=%@", host, resolvedIp);
+      host = resolvedIp;
+    } else {
+      NSLog(@"[MediaSdkFisheyePlayer] Failed to resolve host=%@, passing it through unresolved",
+            host);
+    }
     stRealPlay.pcServerIp = (CHAR *)[host UTF8String];
     stRealPlay.usServerPort = (USHORT)(urlPort != 0 ? urlPort : 554);
   }

@@ -8,6 +8,9 @@
 #include <string.h>
 #include <stdlib.h>
 
+#include <arpa/inet.h>
+#include <netdb.h>
+
 #include <string>
 
 #include "media_sdk_func.h"
@@ -78,6 +81,35 @@ bool ExtractUrlHostPort(const std::string& url, std::string* host, int* port) {
     *port = atoi(authority.substr(colon + 1).c_str());
   }
   return !host->empty();
+}
+
+// pcServerIp is named (and, per a real-device test against a hostname-based
+// cloud RTSP URL, apparently treated) as a literal dotted-decimal IPv4
+// address -- passing a hostname straight through connects fine for a
+// LAN-camera URL (whose "host" already is an IP) but fails for a real
+// domain like dev-srs.turingvideo.com with ENETUNREACH deep in the vendor
+// SDK's own socket layer, since it never resolves the string itself. This
+// does that resolution ourselves via the platform's regular DNS.
+// A literal-IP host round-trips through getaddrinfo/inet_ntop unchanged, so
+// this is safe to call unconditionally rather than only for hostnames.
+bool ResolveHostToIp(const std::string& host, std::string* ip) {
+  struct addrinfo hints;
+  memset(&hints, 0, sizeof(hints));
+  hints.ai_family = AF_INET;
+  hints.ai_socktype = SOCK_STREAM;
+  struct addrinfo* result = nullptr;
+  int rc = getaddrinfo(host.c_str(), nullptr, &hints, &result);
+  if (rc != 0 || result == nullptr) {
+    LOGE("getaddrinfo(%s) failed: %s", host.c_str(), gai_strerror(rc));
+    return false;
+  }
+  char buf[INET_ADDRSTRLEN] = {0};
+  auto* addr = reinterpret_cast<struct sockaddr_in*>(result->ai_addr);
+  const char* formatted = inet_ntop(AF_INET, &addr->sin_addr, buf, sizeof(buf));
+  freeaddrinfo(result);
+  if (formatted == nullptr) return false;
+  *ip = buf;
+  return true;
 }
 
 JNIEnv* AttachCurrentThreadIfNeeded(bool* didAttach) {
@@ -184,8 +216,25 @@ extern "C" JNIEXPORT void JNICALL JNI_OnUnload(JavaVM* vm, void* /*reserved*/) {
   g_vm = nullptr;
 }
 
+// Forwards MediaSDK's internal debug log into logcat. Per media_sdk_func.h's
+// doc on MediaSDK_SetWriteLogCB: "if the caller doesn't register this
+// callback, the SDK records no internal log information at all" -- the
+// MD-ND-tagged lines we already see come from some other, undocumented
+// always-on path inside the .so, so this callback may well surface
+// additional detail (e.g. what the client does when the server just closes
+// the connection with no RTSP reply) that MD-ND doesn't.
+void MediaSdkWriteLogCallback(ULONG_32 logLevel, ULONG_32 errCode, ULONG_32 cmdModuleId,
+                               const CHAR* fileName, ULONG_32 fileLine,
+                               const CHAR* logDescription) {
+  LOGI("[MediaSDK-CB] level=%u err=0x%x module=%u %s:%u %s", logLevel, errCode, cmdModuleId,
+       fileName ? fileName : "", fileLine, logDescription ? logDescription : "");
+}
+
 extern "C" JNIEXPORT jint JNICALL
 Java_com_cloudwebrtc_webrtc_fisheye_MediaSdkFisheyePlayer_nativeInit(JNIEnv*, jclass) {
+  // Must be called before any other MediaSDK function per its own doc.
+  ULONG_32 logRc = MediaSDK_SetWriteLogCB(MediaSdkWriteLogCallback, MEDIASDK_LOG_DEBUG);
+  LOGI("MediaSDK_SetWriteLogCB rc=%u", logRc);
   ULONG_32 rc = MediaSDK_Init();
   LOGI("MediaSDK_Init rc=%u", rc);
   return static_cast<jint>(rc);
@@ -252,6 +301,15 @@ Java_com_cloudwebrtc_webrtc_fisheye_MediaSdkFisheyePlayer_nativeStartRtspStream(
   std::string host;
   int urlPort = 0;
   ExtractUrlHostPort(url, &host, &urlPort);
+  if (!host.empty()) {
+    std::string resolvedIp;
+    if (ResolveHostToIp(host, &resolvedIp)) {
+      LOGI("Resolved host=%s to ip=%s", host.c_str(), resolvedIp.c_str());
+      host = resolvedIp;
+    } else {
+      LOGI("Failed to resolve host=%s, passing it through unresolved", host.c_str());
+    }
+  }
 
   MEDIASDK_RTSP_REALPLAY_S stRealPlay;
   memset(&stRealPlay, 0, sizeof(stRealPlay));
