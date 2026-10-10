@@ -31,6 +31,12 @@ migrate_working_dir/
 build/
 android/.gradle/
 android/.cxx/
+# SwiftPM/Xcode local index cache -- machine-specific, never meant to be
+# committed (ended up in git history by accident once already, see the
+# fisheye work's own gitignore cleanup commits upstream of this port).
+.build/
+ios/flutter_webrtc/.build/
+macos/flutter_webrtc/.build/
 # Prebuilt libwebrtc artifacts fetched at configure time (see
 # third_party/CMakeLists.txt). The checked-in source under third_party/
 # (CMakeLists.txt, libwebrtc_version.ini, svpng/) is published with the package.
