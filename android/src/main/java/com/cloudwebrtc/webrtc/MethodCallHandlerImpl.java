@@ -892,6 +892,19 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
         });
         break;
       }
+      case "fisheyeMediaSdkSetPtzAndFixMode": {
+        Integer ptzMode = call.argument("ptzMode");
+        Integer fixMode = call.argument("fixMode");
+        if (ptzMode == null || fixMode == null) {
+          resultError("fisheyeMediaSdkSetPtzAndFixMode", "ptzMode/fixMode are required", result);
+          return;
+        }
+        executor.execute(() -> {
+          mediaSdkFisheyePlayer.setPtzAndFixMode(ptzMode, fixMode);
+          mainHandler.post(() -> result.success(null));
+        });
+        break;
+      }
       case "fisheyeMediaSdkStop": {
         executor.execute(() -> {
           mediaSdkFisheyePlayer.stop();

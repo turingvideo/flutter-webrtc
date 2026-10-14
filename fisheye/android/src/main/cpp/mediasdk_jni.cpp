@@ -316,12 +316,36 @@ Java_com_cloudwebrtc_webrtc_fisheye_MediaSdkFisheyePlayer_nativeStartRtspStream(
   stRealPlay.enRtspType = MEDIASDK_RTSP_RTP_TCP;
   stRealPlay.enRtspExecuteType = MEDIASDK_RTSP_EXECUTE_TYPE_STANDARD;
   stRealPlay.enStreamMode = MEDIASDK_RTSP_MODE_ONLY_VIDEO;
+  // Confirmed via real-device packet capture: leaving this BOOL_FALSE (its
+  // value from the memset above) still made the vendor SDK send its own
+  // non-standard RTSP "ANNOUNCE" request with a "text/parameters" body of
+  // "ANNOUNCE_KEEP_STREAM" about 1s into PLAY -- SRS doesn't recognize
+  // this proprietary message and responds by closing the TCP connection,
+  // stalling the stream for good after only a handful of frames. Setting
+  // this BOOL_TRUE (despite its "是否需要保活"/"keep-alive needed" doc
+  // comment reading the opposite way) suppresses that broken fallback
+  // entirely -- confirmed continuous, stall-free playback for 500+ frames
+  // with it set, versus the stall recurring every time with it left false.
+  stRealPlay.bKeepAlive = BOOL_TRUE;
   stRealPlay.pcURL = const_cast<char*>(url);
   stRealPlay.pWnd = nullptr;  // no display window -- see MediaSdkFisheyePlayer's doc.
   if (!host.empty()) {
     stRealPlay.pcServerIp = const_cast<char*>(host.c_str());
     stRealPlay.usServerPort = static_cast<USHORT>(urlPort != 0 ? urlPort : 554);
   }
+
+  // EXPERIMENT: real-device logs show this RTSP feed arrives in bursts --
+  // stretches of rtsp_session.cpp "No data detected" (tens of ms apart)
+  // followed by dozens of frames decoded within a few hundred ms, during
+  // which decodequeue.cpp repeatedly logs "Buffer Full, One Frame Is
+  // Covered!". Per MediaSDK_SetCachedFrames's doc, a port defaults to
+  // "直接实况" (direct live, zero frame buffering) unless this is called,
+  // so today every burst slams straight through to onFrame with no
+  // smoothing -- which is what shows up as a stutter then a ~2s jump.
+  // Asking MediaSDK to hold a small queue of decoded frames should let it
+  // pace the burst back out instead of dropping/covering most of it.
+  ULONG_32 cacheRc = MediaSDK_SetCachedFrames(static_cast<ULONG_32>(port), 25);
+  LOGI("MediaSDK_SetCachedFrames port=%d frames=25 rc=%u", port, cacheRc);
 
   ULONG_32 rc = MediaSDK_StartStream(static_cast<ULONG_32>(port), MEDIASDK_STREAM_RTSP_REALPLAY,
                                       &stRealPlay, BOOL_FALSE);

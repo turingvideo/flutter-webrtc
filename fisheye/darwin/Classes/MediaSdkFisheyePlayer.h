@@ -45,6 +45,14 @@ NS_ASSUME_NONNULL_BEGIN
  */
 - (BOOL)startWithRtspUrl:(NSString *)rtspUrl ptzMode:(NSUInteger)ptzMode fixMode:(NSUInteger)fixMode;
 
+/**
+ * Changes the fisheye correction mode on the already-running stream
+ * without reconnecting -- see the .m file's doc for why this exists
+ * separately from -startWithRtspUrl:ptzMode:fixMode:. No-op (returns NO)
+ * if the stream hasn't been started yet.
+ */
+- (BOOL)setPtzMode:(NSUInteger)ptzMode fixMode:(NSUInteger)fixMode;
+
 - (void)stop;
 
 /**

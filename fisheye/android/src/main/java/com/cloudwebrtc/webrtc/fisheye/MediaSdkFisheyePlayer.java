@@ -129,6 +129,28 @@ public class MediaSdkFisheyePlayer {
     return true;
   }
 
+  /**
+   * Changes the fisheye correction mode on the already-running stream,
+   * without tearing down and re-opening the RTSP connection -- unlike
+   * {@link #start}, which must reconnect from scratch, {@code
+   * nativeSetPtzAndFixMode} is a plain passthrough to
+   * MediaSDK_SetPtzAndFixMode and works on a live port. Used when the user
+   * changes mount type/display mode after the stream is already up, since
+   * restarting the whole RTSP connection on every such tap would be slow
+   * and risks retriggering the connection issues this pipeline already had
+   * to work around once. No-op if the stream hasn't started yet -- the
+   * desired mode should instead be passed to {@link #start}'s initial
+   * ptzMode/fixMode in that case.
+   */
+  public synchronized boolean setPtzAndFixMode(int ptzMode, int fixMode) {
+    if (port == -1) return false;
+    int rc = nativeSetPtzAndFixMode(port, ptzMode, fixMode);
+    if (rc != 0) {
+      Log.e(TAG, "MediaSDK_SetPtzAndFixMode failed, rc=" + rc);
+    }
+    return rc == 0;
+  }
+
   public synchronized void stop() {
     if (port == -1) return;
     nativeStopStream(port);
@@ -169,9 +191,58 @@ public class MediaSdkFisheyePlayer {
    * .eventSink) so frame arrival is observable from Dart even with no
    * texture attached; only renders if createTexture() was called first.
    */
+  // DIAGNOSTIC: real-device testing (2026-10-13) showed the on-screen frame
+  // counter freeze for minutes at a time while MediaSDK's own native decode
+  // log (ProcessVideo/decodequeue.cpp) kept running at a rock-steady rate
+  // throughout -- i.e. the native decode/network layer was NOT stalled, so
+  // whatever blocks must be downstream of this callback. Timing each phase
+  // below (with a loud WARN whenever one phase alone takes >200ms) is meant
+  // to catch exactly which call -- the eventSink hop, the CPU-side plane
+  // copy, or the SurfaceTextureRenderer/GL path -- is where a freeze
+  // actually happens next time one is reproduced.
+  private static final long SLOW_FRAME_THRESHOLD_MS = 200;
+
+  // DIAGNOSTIC: checking whether MediaSDK_SetPtzAndFixMode actually changes
+  // what this callback delivers -- the on-screen picture looked identical
+  // across every PTZ mode tried (original/360+1PTZ/pano180) during manual
+  // testing on 2026-10-14. Logs whenever width/height changes (a PTZ/pano
+  // layout should be a different frame shape than the raw circular image)
+  // and periodically logs the luma at frame center vs. the four corners --
+  // a real fisheye circle is bright in the middle of the frame and black in
+  // the corners (outside the lens' circular image), so if correction were
+  // actually being applied those four corner samples should stop being
+  // near-zero once a pano/PTZ mode unwraps the circle to fill the frame.
+  private static int sLastWidth = -1;
+  private static int sLastHeight = -1;
+
+  private static void logFrameShapeDiagnostic(int width, int height, long frameCount,
+                                               ByteBuffer dataY, int strideY) {
+    if (width != sLastWidth || height != sLastHeight) {
+      Log.w(TAG, "FRAME SHAPE CHANGED frameCount=" + frameCount
+          + " " + sLastWidth + "x" + sLastHeight + " -> " + width + "x" + height);
+      sLastWidth = width;
+      sLastHeight = height;
+    }
+    if (frameCount % 50 != 0) return;
+    int cx = width / 2;
+    int cy = height / 2;
+    int edge = Math.max(1, Math.min(width, height) / 20);
+    int centerLuma = dataY.get(cy * strideY + cx) & 0xFF;
+    int topLeftLuma = dataY.get(edge * strideY + edge) & 0xFF;
+    int topRightLuma = dataY.get(edge * strideY + (width - edge)) & 0xFF;
+    int bottomLeftLuma = dataY.get((height - edge) * strideY + edge) & 0xFF;
+    int bottomRightLuma = dataY.get((height - edge) * strideY + (width - edge)) & 0xFF;
+    Log.w(TAG, "FRAME LUMA frameCount=" + frameCount + " " + width + "x" + height
+        + " center=" + centerLuma + " corners=[" + topLeftLuma + "," + topRightLuma + ","
+        + bottomLeftLuma + "," + bottomRightLuma + "]");
+  }
+
   private static void onFrame(int port, int width, int height, int dataType, long frameCount,
                                ByteBuffer dataY, int strideY, ByteBuffer dataU, int strideU,
                                ByteBuffer dataV, int strideV) {
+    long tEntry = android.os.SystemClock.elapsedRealtime();
+    logFrameShapeDiagnostic(width, height, frameCount, dataY, strideY);
+
     if (FlutterWebRTCPlugin.eventSink != null) {
       ConstraintsMap params = new ConstraintsMap();
       params.putString("event", "onFisheyeMediaSdkFrame");
@@ -182,9 +253,13 @@ public class MediaSdkFisheyePlayer {
       params.putLong("frameCount", frameCount);
       FlutterWebRTCPlugin.eventSink.success(params.toMap());
     }
+    long tAfterEventSink = android.os.SystemClock.elapsedRealtime();
 
     SurfaceTextureRenderer renderer = surfaceTextureRenderer;
-    if (renderer == null) return;
+    if (renderer == null) {
+      logFrameTiming(frameCount, tEntry, tAfterEventSink, tAfterEventSink, tAfterEventSink);
+      return;
+    }
     // MEDIASDK_VIDEO_RAW_YUV420 (dataType 0) is the only format this
     // path understands; matches what fisheyeMediaSdkStart always
     // requests (see MediaSdkFisheyePlayer.h's Android counterpart doc).
@@ -196,10 +271,35 @@ public class MediaSdkFisheyePlayer {
     copyPlane(dataY, strideY, buffer.getDataY(), buffer.getStrideY(), width, height);
     copyPlane(dataU, strideU, buffer.getDataU(), buffer.getStrideU(), chromaWidth, chromaHeight);
     copyPlane(dataV, strideV, buffer.getDataV(), buffer.getStrideV(), chromaWidth, chromaHeight);
+    long tAfterCopy = android.os.SystemClock.elapsedRealtime();
 
     VideoFrame frame = new VideoFrame(buffer, 0, System.nanoTime());
     renderer.onFrame(frame);
     frame.release();
+    long tAfterRender = android.os.SystemClock.elapsedRealtime();
+
+    logFrameTiming(frameCount, tEntry, tAfterEventSink, tAfterCopy, tAfterRender);
+  }
+
+  /**
+   * Logs a WARN line (so it survives casual grepping) whenever any single
+   * phase of onFrame() takes longer than {@link #SLOW_FRAME_THRESHOLD_MS},
+   * plus a cheap periodic INFO heartbeat so the timeline can be reconstructed
+   * even if no phase ever crosses the threshold.
+   */
+  private static void logFrameTiming(long frameCount, long tEntry, long tAfterEventSink,
+                                       long tAfterCopy, long tAfterRender) {
+    long eventSinkMs = tAfterEventSink - tEntry;
+    long copyMs = tAfterCopy - tAfterEventSink;
+    long renderMs = tAfterRender - tAfterCopy;
+    long totalMs = tAfterRender - tEntry;
+    if (totalMs >= SLOW_FRAME_THRESHOLD_MS) {
+      Log.w(TAG, "SLOW FRAME frameCount=" + frameCount + " totalMs=" + totalMs
+          + " eventSinkMs=" + eventSinkMs + " copyMs=" + copyMs + " renderMs=" + renderMs);
+    } else if (frameCount % 100 == 0) {
+      Log.i(TAG, "frame timing heartbeat frameCount=" + frameCount + " totalMs=" + totalMs
+          + " eventSinkMs=" + eventSinkMs + " copyMs=" + copyMs + " renderMs=" + renderMs);
+    }
   }
 
   /** Row-by-row copy so source/destination strides don't need to match. */
