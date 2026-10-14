@@ -1,16 +1,28 @@
 import 'dart:async';
 
 import 'event_channel.dart';
+import 'rtc_video_dewarp.dart';
 import 'utils.dart';
 
 /// MEDIASDK_PTZ_MODE_E (fisheye/android/vendor/include/media_sdk_com_def.h)
-/// -- only the modes this project currently cares about; the vendor header
-/// has more (fisheye+3/4/8-PTZ, panorama+N-PTZ, etc).
+/// -- covers every mode [FisheyeDisplayMode] maps to (see
+/// mediaSdkPtzModeForDisplayMode). The vendor enum has 3 more values
+/// (MEDIASDK_FISH_MID_OFF_4PTZ, MEDIASDK_FISH_LEFT_4PTZ, MEDIASDK_1PTZ,
+/// MEDIASDK_NOPR_4PTZ) this project has no UI option for, so they're left
+/// out here; [fisheyePlus4Ptz] uses MEDIASDK_FISH_MID_ON_4PTZ (fisheye
+/// visible, centered) as this project's one 4-PTZ layout.
 enum MediaSdkFisheyePtzMode {
   original(0),
   pano180(1),
   threeSixtyPlus1Ptz(2),
-  threeSixtyPlus6Ptz(3);
+  threeSixtyPlus6Ptz(3),
+  fisheyePlus3Ptz(4),
+  fisheyePlus4Ptz(5),
+  fisheyePlus8Ptz(8),
+  panoramic(9),
+  panoPlus3Ptz(10),
+  panoPlus4Ptz(11),
+  panoPlus8Ptz(12);
 
   const MediaSdkFisheyePtzMode(this.value);
   final int value;
@@ -24,6 +36,50 @@ enum MediaSdkFisheyeFixMode {
 
   const MediaSdkFisheyeFixMode(this.value);
   final int value;
+}
+
+/// Maps a [FisheyeDisplayMode] (the GL-dewarp enum the mount/display type
+/// panel is built on) to the [MediaSdkFisheyePtzMode] the vendor SDK needs
+/// to render the same layout.
+MediaSdkFisheyePtzMode mediaSdkPtzModeForDisplayMode(FisheyeDisplayMode mode) {
+  switch (mode) {
+    case FisheyeDisplayMode.fisheye:
+      return MediaSdkFisheyePtzMode.original;
+    case FisheyeDisplayMode.pano180:
+      return MediaSdkFisheyePtzMode.pano180;
+    case FisheyeDisplayMode.panoramic:
+      return MediaSdkFisheyePtzMode.panoramic;
+    case FisheyeDisplayMode.threeSixtyPlus1Ptz:
+      return MediaSdkFisheyePtzMode.threeSixtyPlus1Ptz;
+    case FisheyeDisplayMode.threeSixtyPlus6Ptz:
+      return MediaSdkFisheyePtzMode.threeSixtyPlus6Ptz;
+    case FisheyeDisplayMode.fisheyePlus3Ptz:
+      return MediaSdkFisheyePtzMode.fisheyePlus3Ptz;
+    case FisheyeDisplayMode.fisheyePlus4Ptz:
+      return MediaSdkFisheyePtzMode.fisheyePlus4Ptz;
+    case FisheyeDisplayMode.fisheyePlus8Ptz:
+      return MediaSdkFisheyePtzMode.fisheyePlus8Ptz;
+    case FisheyeDisplayMode.panoPlus3Ptz:
+      return MediaSdkFisheyePtzMode.panoPlus3Ptz;
+    case FisheyeDisplayMode.panoPlus4Ptz:
+      return MediaSdkFisheyePtzMode.panoPlus4Ptz;
+    case FisheyeDisplayMode.panoPlus8Ptz:
+      return MediaSdkFisheyePtzMode.panoPlus8Ptz;
+  }
+}
+
+/// Maps a [FisheyeMountType] to the [MediaSdkFisheyeFixMode] the vendor SDK
+/// needs to orient its correction correctly -- 1:1, same order as the
+/// vendor's own MEDIASDK_FIX_MODE_E.
+MediaSdkFisheyeFixMode mediaSdkFixModeForMountType(FisheyeMountType mountType) {
+  switch (mountType) {
+    case FisheyeMountType.ceiling:
+      return MediaSdkFisheyeFixMode.topInstallation;
+    case FisheyeMountType.desktop:
+      return MediaSdkFisheyeFixMode.bottomInstallation;
+    case FisheyeMountType.wall:
+      return MediaSdkFisheyeFixMode.sideInstallation;
+  }
 }
 
 /// One corrected-YUV frame arrival, reported by the native MediaSDK decode
@@ -120,6 +176,23 @@ class MediaSdkFisheyePlayer {
   Future<void> stop() async {
     if (!(WebRTC.platformIsAndroid || WebRTC.platformIsIOS)) return;
     await WebRTC.invokeMethod('fisheyeMediaSdkStop', <String, dynamic>{});
+  }
+
+  /// Changes the fisheye correction mode on the already-running stream,
+  /// without tearing down and reconnecting the RTSP session -- unlike
+  /// calling [start] again, this is cheap enough to call every time the
+  /// user picks a different mount type/display mode. No-op if [start]
+  /// hasn't completed yet; pass the desired mode to [start] itself in
+  /// that case.
+  Future<void> setPtzAndFixMode(
+    MediaSdkFisheyePtzMode ptzMode,
+    MediaSdkFisheyeFixMode fixMode,
+  ) async {
+    if (!(WebRTC.platformIsAndroid || WebRTC.platformIsIOS)) return;
+    await WebRTC.invokeMethod(
+      'fisheyeMediaSdkSetPtzAndFixMode',
+      <String, dynamic>{'ptzMode': ptzMode.value, 'fixMode': fixMode.value},
+    );
   }
 
   /// Creates a Flutter [Texture] to display corrected frames on, and

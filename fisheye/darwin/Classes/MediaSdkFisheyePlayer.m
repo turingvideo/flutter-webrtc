@@ -337,6 +337,17 @@ static void OnDecodeVideoData(ULONG_32 ulPort,
   stRealPlay.enRtspType = MEDIASDK_RTSP_RTP_TCP;
   stRealPlay.enRtspExecuteType = MEDIASDK_RTSP_EXECUTE_TYPE_STANDARD;
   stRealPlay.enStreamMode = MEDIASDK_RTSP_MODE_ONLY_VIDEO;
+  // Confirmed on Android via real-device packet capture: leaving this
+  // BOOL_FALSE (its value from the memset above) made the vendor SDK send
+  // its own non-standard RTSP "ANNOUNCE" request with a "text/parameters"
+  // body of "ANNOUNCE_KEEP_STREAM" about 1s into PLAY -- SRS doesn't
+  // recognize this proprietary message and responds by closing the TCP
+  // connection, stalling the stream for good after only a handful of
+  // frames. Setting this BOOL_TRUE (despite its "是否需要保活"/"keep-alive
+  // needed" doc comment reading the opposite way) suppresses that broken
+  // fallback entirely. Applying the same fix here to keep both platforms
+  // in sync rather than waiting to hit the identical failure separately.
+  stRealPlay.bKeepAlive = BOOL_TRUE;
   stRealPlay.pcURL = (CHAR *)[rtspUrl UTF8String];
   stRealPlay.pWnd = NULL;  // no display window -- see class doc.
 
@@ -377,6 +388,28 @@ static void OnDecodeVideoData(ULONG_32 ulPort,
     NSLog(@"[MediaSdkFisheyePlayer] MediaSDK_SetPtzAndFixMode failed rc=%u", (unsigned int)rc);
   }
   return YES;
+}
+
+/**
+ * Changes the fisheye correction mode on the already-running stream,
+ * without tearing down and re-opening the RTSP connection -- mirrors
+ * Android's MediaSdkFisheyePlayer#setPtzAndFixMode. Used when the user
+ * changes mount type/display mode after the stream is already up, since
+ * restarting the whole RTSP connection on every such tap would be slow
+ * and risks retriggering the connection issues this pipeline already had
+ * to work around once. No-op if the stream hasn't started yet -- the
+ * desired mode should instead be passed to -startWithRtspUrl:ptzMode:
+ * fixMode:'s initial ptzMode/fixMode in that case.
+ */
+- (BOOL)setPtzMode:(NSUInteger)ptzMode fixMode:(NSUInteger)fixMode {
+  if (!_hasPort) {
+    return NO;
+  }
+  ULONG_32 rc = MediaSDK_SetPtzAndFixMode(_port, (ULONG_32)ptzMode, (ULONG_32)fixMode);
+  if (rc != ERR_MEDIASDK_SUCCEED) {
+    NSLog(@"[MediaSdkFisheyePlayer] MediaSDK_SetPtzAndFixMode failed rc=%u", (unsigned int)rc);
+  }
+  return rc == ERR_MEDIASDK_SUCCEED;
 }
 
 - (void)stop {

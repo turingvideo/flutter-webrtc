@@ -1157,6 +1157,16 @@ static void FlutterWebRTCApplyFieldTrials(void) {
         }
       });
     });
+  } else if ([@"fisheyeMediaSdkSetPtzAndFixMode" isEqualToString:call.method]) {
+    NSDictionary* argsMap = call.arguments;
+    NSUInteger ptzMode = [argsMap[@"ptzMode"] unsignedIntegerValue];
+    NSUInteger fixMode = [argsMap[@"fixMode"] unsignedIntegerValue];
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+      [self.mediaSdkFisheyePlayer setPtzMode:ptzMode fixMode:fixMode];
+      dispatch_async(dispatch_get_main_queue(), ^{
+        result(nil);
+      });
+    });
   } else if ([@"fisheyeMediaSdkStop" isEqualToString:call.method]) {
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
       [self.mediaSdkFisheyePlayer stop];
