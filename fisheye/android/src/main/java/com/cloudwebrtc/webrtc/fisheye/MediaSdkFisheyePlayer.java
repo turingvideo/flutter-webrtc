@@ -54,6 +54,7 @@ public class MediaSdkFisheyePlayer {
   private static SurfaceTextureRenderer surfaceTextureRenderer;
 
   private int port = -1;
+  private String lastRtspUrl;
 
   static {
     System.loadLibrary("fisheye_mediasdk_jni");
@@ -120,13 +121,54 @@ public class MediaSdkFisheyePlayer {
       return false;
     }
 
+    // CONFIRMED via real-device testing (2026-10-14): calling this BEFORE
+    // StartStream -- tried on the theory that the correction pipeline
+    // might need setting up before the first frame -- made MediaSDK
+    // reject it outright (err 0x11d28, rc=73000), unlike the silent
+    // no-op/no-visual-effect behavior seen calling it after start. So the
+    // port needs an active realplay session before its PTZ/fix mode can
+    // be set at all; fisheye/README.md's reference order (after
+    // StartStream) is the only one that even accepts the call, even
+    // though -- per the *separate*, already-confirmed finding -- the
+    // output frames don't actually show a corrected image either way.
     rc = nativeSetPtzAndFixMode(port, ptzMode, fixMode);
     if (rc != 0) {
       // Not fatal to the stream itself -- leave it running so the raw
       // (uncorrected) circle is still watchable/debuggable.
       Log.e(TAG, "MediaSDK_SetPtzAndFixMode failed, rc=" + rc);
     }
+    lastRtspUrl = rtspUrl;
     return true;
+  }
+
+  /**
+   * EXPERIMENT (2026-10-14): vendor support's suggestion was "after
+   * changing the fisheye correction mode, you need to restart the video
+   * stream" ("修改鱼眼矫正模式后，需要重新启动视频流"). We'd already tried
+   * (a) calling SetPtzAndFixMode on a live stream with no restart at all,
+   * and (b) a full teardown+recreate of the port with the new mode baked
+   * into a brand-new StartStream call -- neither showed any correction
+   * effect. This tries the one combination in between those two: set the
+   * new mode on the existing port, then StopStream + StartStream *on that
+   * same port* (no DestroyPortRes/CreatPortRes), in case the correction
+   * pipeline only reconfigures itself during StartStream's own setup and
+   * reads whatever PTZ/fix mode was last set on the port, rather than
+   * reacting to SetPtzAndFixMode directly.
+   */
+  public synchronized boolean restartSamePortForModeChange(int ptzMode, int fixMode) {
+    if (port == -1 || lastRtspUrl == null) {
+      Log.w(TAG, "restartSamePortForModeChange() called with no active stream");
+      return false;
+    }
+    int rc = nativeSetPtzAndFixMode(port, ptzMode, fixMode);
+    Log.i(TAG, "restartSamePortForModeChange: SetPtzAndFixMode rc=" + rc);
+
+    rc = nativeStopStream(port);
+    Log.i(TAG, "restartSamePortForModeChange: StopStream rc=" + rc);
+
+    rc = nativeStartRtspStream(port, lastRtspUrl);
+    Log.i(TAG, "restartSamePortForModeChange: StartStream rc=" + rc);
+    return rc == 0;
   }
 
   /**
