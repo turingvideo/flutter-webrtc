@@ -195,8 +195,45 @@ static void OnDecodeVideoData(ULONG_32 ulPort,
   [player handleDecodedFrame:pDecodeVideoData port:ulPort];
 }
 
+// DIAGNOSTIC (2026-10-14): mirrors the Android-side logFrameShapeDiagnostic
+// -- checking whether MediaSDK_SetPtzAndFixMode actually changes what this
+// callback delivers on iOS too (Android testing showed zero effect across
+// every mode and every restart strategy tried). Logs whenever width/height
+// changes, and periodically logs luma at frame center vs. the four
+// corners -- a real fisheye circle is bright in the middle and black in
+// the corners (outside the lens' circular image), so real correction
+// should stop those corner samples being near-zero.
+static int sLastWidth = -1;
+static int sLastHeight = -1;
+
+static void LogFrameShapeDiagnostic(int width, int height, unsigned long long frameCount,
+                                     const unsigned char *dataY, int strideY) {
+  if (width != sLastWidth || height != sLastHeight) {
+    NSLog(@"[MediaSdkFisheyePlayer] FRAME SHAPE CHANGED frameCount=%llu %dx%d -> %dx%d",
+          frameCount, sLastWidth, sLastHeight, width, height);
+    sLastWidth = width;
+    sLastHeight = height;
+  }
+  if (frameCount % 50 != 0) return;
+  int cx = width / 2;
+  int cy = height / 2;
+  int edge = MAX(1, MIN(width, height) / 20);
+  int centerLuma = dataY[cy * strideY + cx];
+  int topLeftLuma = dataY[edge * strideY + edge];
+  int topRightLuma = dataY[edge * strideY + (width - edge)];
+  int bottomLeftLuma = dataY[(height - edge) * strideY + edge];
+  int bottomRightLuma = dataY[(height - edge) * strideY + (width - edge)];
+  NSLog(@"[MediaSdkFisheyePlayer] FRAME LUMA frameCount=%llu %dx%d center=%d corners=[%d,%d,%d,%d]",
+        frameCount, width, height, centerLuma, topLeftLuma, topRightLuma, bottomLeftLuma,
+        bottomRightLuma);
+}
+
 - (void)handleDecodedFrame:(const MEDIASDK_DECODE_VIDEO_RAW_S *)frame port:(ULONG_32)port {
   _frameCount++;
+  if (frame->eDataType == 0) {
+    LogFrameShapeDiagnostic((int)frame->ulPicWidth, (int)frame->ulPicHeight, _frameCount,
+                             frame->pucData[0], (int)frame->ulLineSize[0]);
+  }
   FlutterEventSink sink = self.eventSink;
   if (sink) {
     NSDictionary *event = @{

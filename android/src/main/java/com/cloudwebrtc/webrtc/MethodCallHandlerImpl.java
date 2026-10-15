@@ -905,6 +905,23 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
         });
         break;
       }
+      case "fisheyeMediaSdkRestartSamePortForModeChange": {
+        // EXPERIMENT (2026-10-14): see MediaSdkFisheyePlayer's doc on this
+        // method -- testing vendor support's suggestion that changing the
+        // correction mode requires restarting the stream (same port, no
+        // full teardown) rather than just calling SetPtzAndFixMode live.
+        Integer ptzMode = call.argument("ptzMode");
+        Integer fixMode = call.argument("fixMode");
+        if (ptzMode == null || fixMode == null) {
+          resultError("fisheyeMediaSdkRestartSamePortForModeChange", "ptzMode/fixMode are required", result);
+          return;
+        }
+        executor.execute(() -> {
+          boolean ok = mediaSdkFisheyePlayer.restartSamePortForModeChange(ptzMode, fixMode);
+          mainHandler.post(() -> result.success(ok));
+        });
+        break;
+      }
       case "fisheyeMediaSdkStop": {
         executor.execute(() -> {
           mediaSdkFisheyePlayer.stop();

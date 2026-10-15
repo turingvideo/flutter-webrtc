@@ -195,6 +195,27 @@ class MediaSdkFisheyePlayer {
     );
   }
 
+  /// EXPERIMENT (2026-10-14): vendor support's suggestion was "after
+  /// changing the fisheye correction mode, you need to restart the video
+  /// stream" -- unlike [setPtzAndFixMode] (which sets the mode on a live
+  /// stream with no restart), this sets the mode and then does a
+  /// StopStream+StartStream on the *same* native port (no RTSP
+  /// reconnect-from-scratch, no texture/port recreation) to test whether
+  /// that's what's needed for the mode change to actually take visual
+  /// effect. Android only for now -- this is a diagnostic, not yet a
+  /// permanent API.
+  Future<bool> restartSamePortForModeChange(
+    MediaSdkFisheyePtzMode ptzMode,
+    MediaSdkFisheyeFixMode fixMode,
+  ) async {
+    if (!WebRTC.platformIsAndroid) return false;
+    final result = await WebRTC.invokeMethod(
+      'fisheyeMediaSdkRestartSamePortForModeChange',
+      <String, dynamic>{'ptzMode': ptzMode.value, 'fixMode': fixMode.value},
+    );
+    return result == true;
+  }
+
   /// Creates a Flutter [Texture] to display corrected frames on, and
   /// returns its textureId (pass straight to a `Texture(textureId: ...)`
   /// widget). Can be called before or after [start] -- frames just have
