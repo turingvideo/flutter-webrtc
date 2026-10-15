@@ -385,11 +385,25 @@ public class DewarpGlDrawer implements RendererCommon.GlDrawer {
     int totalTiles = 1 + ptzTileCount;
     float baseTileHeightFraction = config.displayMode.baseTileHeightFraction();
     for (int tileIndex = 0; tileIndex < totalTiles; tileIndex++) {
-      float[] rect = tileRectNormalizedTopLeft(tileIndex, ptzTileCount, baseTileHeightFraction);
-      int tileX = viewportX + (int) (rect[0] * viewportWidth);
-      int tileYTopLeft = (int) (rect[1] * viewportHeight);
-      int tileW = Math.max(1, (int) (rect[2] * viewportWidth));
-      int tileH = Math.max(1, (int) (rect[3] * viewportHeight));
+      int tileX, tileYTopLeft, tileW, tileH;
+      if (ptzTileCount == 4 && tileIndex > 0) {
+        // Product spec (2026-10-15): the four PTZ cells must be truly 1:1
+        // (square) in actual on-screen pixels -- the plain normalized-
+        // fraction math below would only happen to produce square cells
+        // if the overall canvas itself were exactly 2:1, so this needs
+        // real pixel dimensions instead of a fixed proportion.
+        int[] px = squarePtzCellRectPixelsTopLeft(tileIndex - 1, viewportWidth, viewportHeight);
+        tileX = viewportX + px[0];
+        tileYTopLeft = px[1];
+        tileW = px[2];
+        tileH = px[3];
+      } else {
+        float[] rect = tileRectNormalizedTopLeft(tileIndex, ptzTileCount, baseTileHeightFraction);
+        tileX = viewportX + (int) (rect[0] * viewportWidth);
+        tileYTopLeft = (int) (rect[1] * viewportHeight);
+        tileW = Math.max(1, (int) (rect[2] * viewportWidth));
+        tileH = Math.max(1, (int) (rect[3] * viewportHeight));
+      }
       int tileYGl = viewportY + viewportHeight - tileYTopLeft - tileH;
       glViewport(tileX, tileYGl, tileW, tileH);
 
@@ -552,6 +566,54 @@ public class DewarpGlDrawer implements RendererCommon.GlDrawer {
     if (ptzTileCount == 0) {
       return new float[] {0f, 0f, 1f, 1f};
     }
+    if (ptzTileCount == 3) {
+      // Product spec (2026-10-15): an even 2x2 grid -- base tile
+      // (fisheye/pano) in the top-left cell, the three PTZ tiles filling
+      // the rest in order (top-right, bottom-left, bottom-right). Unlike
+      // the general case below, the base tile is NOT full-width here.
+      int col = tileIndex % 2;
+      int row = tileIndex / 2;
+      return new float[] {col * 0.5f, row * 0.5f, 0.5f, 0.5f};
+    }
+    if (ptzTileCount == 4) {
+      // Product spec (2026-10-15): left/right split -- base tile
+      // (fisheye/pano) fills the full-height left half. The four PTZ
+      // tiles also live in the full-height right half, but -- unlike
+      // every other normalized-fraction case on this method -- they must
+      // be pixel-exact squares, which depends on the destination's actual
+      // aspect ratio, not just a fixed proportion. composite() special-
+      // cases tileIndex > 0 here and calls squarePtzCellRectPixelsTopLeft
+      // directly instead; this branch only ever needs to handle the base
+      // tile (tileIndex == 0).
+      return new float[] {0f, 0f, 0.5f, 1f};
+    }
+    if (ptzTileCount == 8) {
+      // Product spec (2026-10-15): a uniform 3x3 grid -- base tile
+      // (fisheye) in the dead-center cell, the eight PTZ tiles filling
+      // the rest in row-major reading order (skipping over the center).
+      int cellIndex = tileIndex == 0 ? 4 : (tileIndex - 1 < 4 ? tileIndex - 1 : tileIndex);
+      int col = cellIndex % 3;
+      int row = cellIndex / 3;
+      return new float[] {col / 3f, row / 3f, 1f / 3f, 1f / 3f};
+    }
+    if (ptzTileCount == 6) {
+      // Product spec (2026-10-15): threeSixtyPlus6Ptz swaps the general
+      // case's top/bottom order -- the PTZ grid goes on top, the base
+      // (360 panorama strip) on the bottom. Both still get
+      // baseTileHeightFraction/its complement of the height, same as the
+      // general case below; only which one sits on top changes.
+      if (tileIndex == 0) {
+        return new float[] {0f, 1f - baseTileHeightFraction, 1f, baseTileHeightFraction};
+      }
+      int ptzIndex = tileIndex - 1;
+      int cols = (int) Math.ceil(Math.sqrt(ptzTileCount));
+      int rows = (int) Math.ceil(ptzTileCount / (double) cols);
+      int col = ptzIndex % cols;
+      int row = ptzIndex / cols;
+      float cellW = 1f / cols;
+      float cellH = (1f - baseTileHeightFraction) / rows;
+      return new float[] {col * cellW, row * cellH, cellW, cellH};
+    }
     if (tileIndex == 0) {
       return new float[] {0f, 0f, 1f, baseTileHeightFraction};
     }
@@ -563,6 +625,32 @@ public class DewarpGlDrawer implements RendererCommon.GlDrawer {
     float cellW = 1f / cols;
     float cellH = (1f - baseTileHeightFraction) / rows;
     return new float[] {col * cellW, baseTileHeightFraction + row * cellH, cellW, cellH};
+  }
+
+  /**
+   * Pixel-exact {x, yTopDown, w, h} (origin top-left / y-down, like {@link
+   * #tileRectNormalizedTopLeft}'s convention but in real pixels instead of
+   * [0,1] fractions) for one of the four PTZ cells in the {@code
+   * ptzTileCount == 4} left/right layout's right half. The right half is
+   * {@code viewportWidth / 2} wide by {@code viewportHeight} tall; this
+   * sizes a 2x2 grid of squares to the largest that fits inside that
+   * region without cropping, then centers it (leftover space split evenly
+   * on whichever axis doesn't divide evenly -- usually the vertical one,
+   * since the right half is taller than it is wide for most camera feeds).
+   */
+  private static int[] squarePtzCellRectPixelsTopLeft(
+      int ptzIndex, int viewportWidth, int viewportHeight) {
+    float halfWidth = viewportWidth / 2f;
+    float cellSize = Math.min(halfWidth / 2f, viewportHeight / 2f);
+    float gridSize = cellSize * 2f;
+    float offsetX = halfWidth + (halfWidth - gridSize) / 2f;
+    float offsetY = (viewportHeight - gridSize) / 2f;
+    int col = ptzIndex % 2;
+    int row = ptzIndex / 2;
+    int size = Math.max(1, (int) cellSize);
+    return new int[] {
+      (int) (offsetX + col * cellSize), (int) (offsetY + row * cellSize), size, size
+    };
   }
 
   /**
@@ -582,8 +670,21 @@ public class DewarpGlDrawer implements RendererCommon.GlDrawer {
       }
       return new int[] {decodedWidth, decodedWidth}; // raw circle: square canvas
     }
-    // base tile (baseTileHeightFraction tall) + a roughly-square PTZ grid
-    // below it, both spanning the full width.
+    if (ptzTileCount == 4) {
+      // Product spec (2026-10-15): left/right split, each half W/2 wide x
+      // H tall. A 2:1 canvas makes each half exactly square (W/2 x W/2),
+      // which in turn lets the right half's 2x2 PTZ grid fill it exactly
+      // -- any other ratio leaves the square grid letterboxed inside a
+      // non-square right half (tileRectForIndex still safely handles
+      // that, but it wastes space the way the general-case aspect-ratio
+      // formula below did when this mode still used it).
+      return new int[] {decodedWidth, Math.max(1, decodedWidth / 2)};
+    }
+    // General case (also covers ptzTileCount == 3/8's uniform grids, per
+    // product feedback 2026-10-15: filling the player's available space
+    // matters more than keeping every cell pixel-square): base tile
+    // (baseTileHeightFraction tall) + a roughly-square PTZ grid below it,
+    // both spanning the full width.
     float baseTileHeightFraction = config.displayMode.baseTileHeightFraction();
     return new int[] {decodedWidth,
         Math.max(1, (int) (decodedWidth / (2f - baseTileHeightFraction)))};

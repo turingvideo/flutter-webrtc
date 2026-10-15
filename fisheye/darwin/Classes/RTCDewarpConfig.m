@@ -95,8 +95,17 @@ NSString* const RTCDewarpConfigErrorDomain = @"FlutterWebRTC.RTCDewarpConfig";
         break;
     }
     _usesPanoramaBase = _panoramaArcSpanDeg > 0;
-    _baseTileHeightFraction =
-        displayMode == RTCDewarpDisplayModeThreeSixtyPlus1Ptz ? (2.0f / 3.0f) : 0.5f;
+    // Product spec (2026-10-15): threeSixtyPlus6Ptz gives 1/3 to the
+    // overview strip, 2/3 to the PTZ grid -- the opposite skew from
+    // threeSixtyPlus1Ptz. Mirrors DewarpConfig.DisplayMode.baseTileHeightFraction
+    // on Android exactly.
+    if (displayMode == RTCDewarpDisplayModeThreeSixtyPlus1Ptz) {
+      _baseTileHeightFraction = 2.0f / 3.0f;
+    } else if (displayMode == RTCDewarpDisplayModeThreeSixtyPlus6Ptz) {
+      _baseTileHeightFraction = 1.0f / 3.0f;
+    } else {
+      _baseTileHeightFraction = 0.5f;
+    }
     _usesPanoramaPtzTiles = displayMode == RTCDewarpDisplayModeThreeSixtyPlus1Ptz;
     _usesDirectCropBase = displayMode == RTCDewarpDisplayModeThreeSixtyPlus1Ptz;
     _basePanDeg = 0.0f;

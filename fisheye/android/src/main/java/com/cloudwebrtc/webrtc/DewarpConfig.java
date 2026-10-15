@@ -76,13 +76,16 @@ public class DewarpConfig {
     /**
      * Fraction of the composite canvas height given to the base tile (the
      * rest goes to the PTZ tile grid). Placeholder pending pixel-accurate UI
-     * mockups, same status as {@link DewarpGlDrawer}'s constants -- only
+     * mockups, same status as {@link DewarpGlDrawer}'s constants.
      * {@link #THREE_SIXTY_PLUS_1_PTZ} deviates from the shared 0.5 default
-     * so far (product wants the overview strip to dominate: 2/3 overview,
-     * 1/3 scrollable close-up).
+     * (product wants the overview strip to dominate: 2/3 overview, 1/3
+     * scrollable close-up). {@link #THREE_SIXTY_PLUS_6_PTZ} deviates the
+     * other way (product spec 2026-10-15: 1/3 overview strip, 2/3 PTZ grid).
      */
     public float baseTileHeightFraction() {
-      return this == THREE_SIXTY_PLUS_1_PTZ ? 2f / 3f : 0.5f;
+      if (this == THREE_SIXTY_PLUS_1_PTZ) return 2f / 3f;
+      if (this == THREE_SIXTY_PLUS_6_PTZ) return 1f / 3f;
+      return 0.5f;
     }
 
     /**

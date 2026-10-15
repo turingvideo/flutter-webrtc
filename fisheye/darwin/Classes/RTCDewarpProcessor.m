@@ -423,6 +423,92 @@ static NSString* const kDirectCropWarpKernelSource =
     yNormTopDown = 0;
     wNorm = 1;
     hNorm = 1;
+  } else if (ptzTileCount == 3) {
+    // Product spec (2026-10-15): an even 2x2 grid -- base tile
+    // (fisheye/pano) in the top-left cell, the three PTZ tiles filling
+    // the rest in order (top-right, bottom-left, bottom-right). Mirrors
+    // DewarpGlDrawer.tileRectNormalizedTopLeft's ptzTileCount==3 case
+    // exactly. Unlike the general case below, the base tile is NOT
+    // full-width here.
+    NSInteger col = tileIndex % 2;
+    NSInteger row = tileIndex / 2;
+    xNorm = col * 0.5;
+    yNormTopDown = row * 0.5;
+    wNorm = 0.5;
+    hNorm = 0.5;
+  } else if (ptzTileCount == 8) {
+    // Product spec (2026-10-15): a uniform 3x3 grid -- base tile (fisheye)
+    // in the dead-center cell, the eight PTZ tiles filling the rest in
+    // row-major reading order (skipping over the center). Mirrors
+    // DewarpGlDrawer.tileRectNormalizedTopLeft's ptzTileCount==8 case
+    // exactly.
+    NSInteger cellIndex;
+    if (tileIndex == 0) {
+      cellIndex = 4;
+    } else {
+      cellIndex = (tileIndex - 1 < 4) ? (tileIndex - 1) : tileIndex;
+    }
+    NSInteger col = cellIndex % 3;
+    NSInteger row = cellIndex / 3;
+    xNorm = col / 3.0;
+    yNormTopDown = row / 3.0;
+    wNorm = 1.0 / 3.0;
+    hNorm = 1.0 / 3.0;
+  } else if (ptzTileCount == 4 && tileIndex == 0) {
+    // Product spec (2026-10-15): left/right split -- base tile
+    // (fisheye/pano) fills the full-height left half (the four PTZ tiles,
+    // handled in the branch below, need pixel-exact squares instead of a
+    // fixed normalized fraction, so they're not part of this shared
+    // xNorm/yNormTopDown/wNorm/hNorm path).
+    xNorm = 0;
+    yNormTopDown = 0;
+    wNorm = 0.5;
+    hNorm = 1;
+  } else if (ptzTileCount == 4) {
+    // The four PTZ cells must be truly 1:1 (square) in actual on-screen
+    // pixels -- a fixed normalized fraction would only happen to produce
+    // square cells if destWidth/destHeight were exactly 2:1, so this
+    // needs the real pixel dimensions. Mirrors DewarpGlDrawer's
+    // squarePtzCellRectPixelsTopLeft exactly: the right half is
+    // destWidth/2 wide by destHeight tall; size a 2x2 grid of squares to
+    // the largest that fits without cropping, then center it.
+    NSInteger ptzIndex = tileIndex - 1;
+    CGFloat halfWidth = destWidth / 2.0;
+    CGFloat cellSize = MIN(halfWidth / 2.0, destHeight / 2.0);
+    CGFloat gridSize = cellSize * 2.0;
+    CGFloat offsetX = halfWidth + (halfWidth - gridSize) / 2.0;
+    CGFloat offsetY = (destHeight - gridSize) / 2.0;
+    NSInteger col = ptzIndex % 2;
+    NSInteger row = ptzIndex / 2;
+    CGFloat tileWidth = MAX(1, cellSize);
+    CGFloat tileHeight = tileWidth;
+    CGFloat tileX = offsetX + col * cellSize;
+    CGFloat yTopDown = offsetY + row * cellSize;
+    CGFloat tileY = destHeight - yTopDown - tileHeight;
+    return CGRectMake(tileX, tileY, tileWidth, tileHeight);
+  } else if (ptzTileCount == 6) {
+    // Product spec (2026-10-15): threeSixtyPlus6Ptz swaps the general
+    // case's top/bottom order -- the PTZ grid goes on top, the base (360
+    // panorama strip) on the bottom. Mirrors DewarpGlDrawer's
+    // ptzTileCount==6 case exactly.
+    if (tileIndex == 0) {
+      xNorm = 0;
+      yNormTopDown = 1.0 - baseTileHeightFraction;
+      wNorm = 1;
+      hNorm = baseTileHeightFraction;
+    } else {
+      NSInteger ptzIndex = tileIndex - 1;
+      NSInteger cols = (NSInteger)ceil(sqrt((double)ptzTileCount));
+      NSInteger rows = (NSInteger)ceil((double)ptzTileCount / (double)cols);
+      NSInteger col = ptzIndex % cols;
+      NSInteger row = ptzIndex / cols;
+      CGFloat cellW = 1.0 / cols;
+      CGFloat cellH = (1.0 - baseTileHeightFraction) / rows;
+      xNorm = col * cellW;
+      yNormTopDown = row * cellH;
+      wNorm = cellW;
+      hNorm = cellH;
+    }
   } else if (tileIndex == 0) {
     xNorm = 0;
     yNormTopDown = 0;
@@ -460,6 +546,18 @@ static NSString* const kDirectCropWarpKernelSource =
     }
     return CGSizeMake(decodedSize.width, decodedSize.width);  // raw circle: square canvas
   }
+  if (ptzTileCount == 4) {
+    // Product spec (2026-10-15): left/right split, each half W/2 wide x
+    // H tall. A 2:1 canvas makes each half exactly square (W/2 x W/2),
+    // which in turn lets the right half's 2x2 PTZ grid fill it exactly.
+    // Mirrors DewarpGlDrawer.compositeSize's ptzTileCount == 4 case
+    // exactly.
+    return CGSizeMake(decodedSize.width, MAX(1, decodedSize.width / 2.0));
+  }
+  // General case (also covers ptzTileCount == 3/8's uniform grids, per
+  // product feedback 2026-10-15: filling the player's available space
+  // matters more than keeping every cell pixel-square). Mirrors
+  // DewarpGlDrawer.compositeSize's general case exactly.
   return CGSizeMake(decodedSize.width,
                      MAX(1, decodedSize.width / (2.0 - config.baseTileHeightFraction)));
 }
