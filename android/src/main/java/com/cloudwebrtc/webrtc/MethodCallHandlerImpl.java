@@ -91,6 +91,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.UUID;
@@ -162,6 +163,12 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
   // trial above.
   private static final String FIELD_TRIAL_FORCE_PLAYOUT_DELAY =
           "WebRTC-ForcePlayoutDelay/min_ms:0,max_ms:0/";
+
+  // Same trial with a floor instead: frames are held at least this long, giving
+  // retransmissions time to arrive on lossy long-RTT links. 10 s is libwebrtc's
+  // default max playout delay.
+  private static final String FIELD_TRIAL_MIN_PLAYOUT_DELAY_FORMAT =
+          "WebRTC-ForcePlayoutDelay/min_ms:%d,max_ms:10000/";
 
   private static boolean warpEnabled = false;
 
@@ -241,7 +248,7 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
     mPeerConnectionObservers.clear();
   }
   private void initialize(boolean bypassVoiceProcessing, boolean androidUseHardwareAudioProcessing, int networkIgnoreMask, boolean forceSWCodec, List<String> forceSWCodecList,
-  @Nullable ConstraintsMap androidAudioConfiguration, Severity logSeverity, @Nullable Integer audioSampleRate, @Nullable Integer audioOutputSampleRate, boolean enableWARP, boolean zeroPlayoutDelay) {
+  @Nullable ConstraintsMap androidAudioConfiguration, Severity logSeverity, @Nullable Integer audioSampleRate, @Nullable Integer audioOutputSampleRate, boolean enableWARP, boolean zeroPlayoutDelay, @Nullable Integer minPlayoutDelayMs) {
     if (mFactory != null) {
       return;
     }
@@ -259,6 +266,8 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
     }
     if (zeroPlayoutDelay) {
       fieldTrials += FIELD_TRIAL_FORCE_PLAYOUT_DELAY;
+    } else if (minPlayoutDelayMs != null && minPlayoutDelayMs > 0) {
+      fieldTrials += String.format(Locale.ROOT, FIELD_TRIAL_MIN_PLAYOUT_DELAY_FORMAT, minPlayoutDelayMs);
     }
     if (!fieldTrials.isEmpty()) {
       initializationOptionsBuilder.setFieldTrials(fieldTrials);
@@ -525,7 +534,13 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
           zeroPlayoutDelay = constraintsMap.getBoolean("zeroPlayoutDelay");
         }
 
-        initialize(enableBypassVoiceProcessing, androidUseHardwareAudioProcessing, networkIgnoreMask, forceSWCodec, forceSWCodecList, androidAudioConfiguration, logSeverity, audioSampleRate, audioOutputSampleRate, enableWARP, zeroPlayoutDelay);
+        Integer minPlayoutDelayMs = null;
+        if (constraintsMap.hasKey("minPlayoutDelayMs")
+                && constraintsMap.getType("minPlayoutDelayMs") == ObjectType.Number) {
+          minPlayoutDelayMs = constraintsMap.getInt("minPlayoutDelayMs");
+        }
+
+        initialize(enableBypassVoiceProcessing, androidUseHardwareAudioProcessing, networkIgnoreMask, forceSWCodec, forceSWCodecList, androidAudioConfiguration, logSeverity, audioSampleRate, audioOutputSampleRate, enableWARP, zeroPlayoutDelay, minPlayoutDelayMs);
         result.success(null);
         break;
       }

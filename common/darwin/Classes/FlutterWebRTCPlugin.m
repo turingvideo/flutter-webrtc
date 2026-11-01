@@ -162,6 +162,11 @@ static NSString* const kFlutterWebRTCFieldTrialZeroPlayoutDelayValue = @"min_ms:
 
 static BOOL gZeroPlayoutDelayEnabled = NO;
 
+// Same trial with a floor instead (`minPlayoutDelayMs`): frames are held at least
+// this long, giving retransmissions time to arrive on lossy long-RTT links. 10 s
+// is libwebrtc's default max playout delay.
+static NSInteger gMinPlayoutDelayMs = 0;
+
 static void FlutterWebRTCApplyFieldTrials(void) {
   // "Key/Value/" pairs. +configureFieldTrials: replaces the whole string and is
   // read when the factory creates its environment, so every trial has to be in
@@ -175,6 +180,9 @@ static void FlutterWebRTCApplyFieldTrials(void) {
   if (gZeroPlayoutDelayEnabled) {
     [fieldTrials appendFormat:@"%@/%@/", kFlutterWebRTCFieldTrialForcePlayoutDelay,
                               kFlutterWebRTCFieldTrialZeroPlayoutDelayValue];
+  } else if (gMinPlayoutDelayMs > 0) {
+    [fieldTrials appendFormat:@"%@/min_ms:%ld,max_ms:10000/",
+                              kFlutterWebRTCFieldTrialForcePlayoutDelay, (long)gMinPlayoutDelayMs];
   }
   // Replaces the deprecated RTCInitFieldTrialDictionary(), which set a
   // process-global instead (bugs.webrtc.org/42220378).
@@ -389,16 +397,19 @@ static void FlutterWebRTCApplyFieldTrials(void) {
     bypassVoiceProcessing:(BOOL)bypassVoiceProcessing
                  severity:(RTCLoggingSeverity)severity
               enableWARP:(BOOL)enableWARP
-        zeroPlayoutDelay:(BOOL)zeroPlayoutDelay {
+        zeroPlayoutDelay:(BOOL)zeroPlayoutDelay
+       minPlayoutDelayMs:(NSInteger)minPlayoutDelayMs {
     // RTCSetMinDebugLogLevel(severity);
     [self initLoggerCallback:severity];
 
     if (!_peerConnectionFactory) {
         // Field trials have to be in place before the factory builds its transports,
         // so a later initialize: call cannot change them any more.
-        if (enableWARP != gWarpEnabled || zeroPlayoutDelay != gZeroPlayoutDelayEnabled) {
+        if (enableWARP != gWarpEnabled || zeroPlayoutDelay != gZeroPlayoutDelayEnabled ||
+            minPlayoutDelayMs != gMinPlayoutDelayMs) {
           gWarpEnabled = enableWARP;
           gZeroPlayoutDelayEnabled = zeroPlayoutDelay;
+          gMinPlayoutDelayMs = minPlayoutDelayMs;
           FlutterWebRTCApplyFieldTrials();
         }
 
@@ -526,10 +537,17 @@ static void FlutterWebRTCApplyFieldTrials(void) {
       zeroPlayoutDelay = ((NSNumber*)options[@"zeroPlayoutDelay"]).boolValue;
     }
 
+    NSInteger minPlayoutDelayMs = 0;
+    if (options[@"minPlayoutDelayMs"] != nil &&
+        [options[@"minPlayoutDelayMs"] isKindOfClass:[NSNumber class]]) {
+      minPlayoutDelayMs = ((NSNumber*)options[@"minPlayoutDelayMs"]).integerValue;
+    }
+
     [self initialize:networkIgnoreMask bypassVoiceProcessing:enableBypassVoiceProcessing
                      severity:severity
                      enableWARP:enableWARP
-                     zeroPlayoutDelay:zeroPlayoutDelay];
+                     zeroPlayoutDelay:zeroPlayoutDelay
+                     minPlayoutDelayMs:minPlayoutDelayMs];
     result(@"");
   } else if ([@"createPeerConnection" isEqualToString:call.method]) {
     NSDictionary* argsMap = call.arguments;
