@@ -88,6 +88,13 @@ class WebRTC {
   ///                     for low latency scenarios on reliable networks. Like
   ///                     `enableWARP` it is a field trial, so it has to be set
   ///                     before the first peer connection is created.
+  ///
+  /// "minPlayoutDelayMs": (Android/iOS/macOS) an int that holds every received
+  ///                      video frame for at least this many milliseconds (the
+  ///                      `WebRTC-ForcePlayoutDelay/min_ms:<value>,max_ms:10000/`
+  ///                      field trial), giving retransmissions time to arrive on
+  ///                      lossy long-RTT links. Applies to every video receiver in
+  ///                      the process. Ignored when `zeroPlayoutDelay` is true.
   static Future<void> initialize({Map<String, dynamic>? options}) async {
     if (!initialized) {
       await _channel.invokeMethod<void>('initialize', <String, dynamic>{
