@@ -519,10 +519,22 @@ class PeerConnectionObserver implements PeerConnection.Observer, EventChannel.St
   @Override
   public void onAddTrack(RtpReceiver receiver, MediaStream[] mediaStreams) {
     Log.d(TAG, "onAddTrack");
+    MediaStreamTrack track = receiver.track();
+    if (track == null) {
+      return;
+    }
+    // Unified Plan tracks can arrive before onAddStream, or without a stream.
+    remoteTracks.put(track.id(), track);
+    if (this.configuration.sdpSemantics == PeerConnection.SdpSemantics.UNIFIED_PLAN) {
+      // Keep the callback-owned wrapper, not a disposable enumeration result (#2230).
+      String streamId = mediaStreams.length > 0 ? mediaStreams[0].getId() : "";
+      remoteTracksByReceiver.put(receiver.id(), track);
+      stateProvider.onRemoteTrackAdded(id, streamId, track);
+    }
+    List<ConstraintsMap> legacyEvents = new ArrayList<>();
     // for plan-b
     for (MediaStream stream : mediaStreams) {
       String streamId = stream.getId();
-      MediaStreamTrack track = receiver.track();
       ConstraintsMap params = new ConstraintsMap();
       params.putString("event", "onAddTrack");
       params.putString("streamId", streamId);
@@ -538,7 +550,7 @@ class PeerConnectionObserver implements PeerConnection.Observer, EventChannel.St
       trackInfo.putString("readyState", track.state().toString());
       trackInfo.putBoolean("remote", true);
       params.putMap("track", trackInfo.toMap());
-      sendEvent(params);
+      legacyEvents.add(params);
 
     }
 
@@ -552,26 +564,10 @@ class PeerConnectionObserver implements PeerConnection.Observer, EventChannel.St
 
     params.putString("event", "onTrack");
     params.putArray("streams", streams.toArrayList());
-    params.putMap("track", mediaTrackToMap(receiver.track()));
+    params.putMap("track", mediaTrackToMap(track));
     params.putMap("receiver", rtpReceiverToMap(receiver));
 
     if (this.configuration.sdpSemantics == PeerConnection.SdpSemantics.UNIFIED_PLAN) {
-      // Register the track object of this callback's receiver, as
-      // onAddStream does for Plan B. Without it a renderer resolves the
-      // track through peerConnection.getTransceivers(), whose next call (from
-      // here, or any getTransceivers/getReceivers from Dart) disposes the
-      // RtpTransceivers of the previous one, their receivers' tracks and,
-      // with them, every sink attached to those tracks: the renderer stops
-      // receiving frames while the track keeps decoding. The receiver of this
-      // callback is not part of those lists, so its track object stays valid.
-      MediaStreamTrack receiverTrack = receiver.track();
-      if (receiverTrack != null) {
-        String streamId = mediaStreams.length > 0 ? mediaStreams[0].getId() : "";
-        remoteTracks.put(receiverTrack.id(), receiverTrack);
-        remoteTracksByReceiver.put(receiver.id(), receiverTrack);
-        stateProvider.onRemoteTrackAdded(id, streamId, receiverTrack);
-      }
-
       List<RtpTransceiver> transceivers = peerConnection.getTransceivers();
       for (RtpTransceiver transceiver : transceivers) {
         if (transceiver.getReceiver() != null && receiver.id().equals(transceiver.getReceiver().id())) {
@@ -583,6 +579,10 @@ class PeerConnectionObserver implements PeerConnection.Observer, EventChannel.St
           params.putMap("transceiver", transceiverToMap(transceiverId, transceiver));
         }
       }
+    }
+    // Finish the snapshot before Flutter can start track/volume operations.
+    for (ConstraintsMap legacyEvent : legacyEvents) {
+      sendEvent(legacyEvent);
     }
     sendEvent(params);
   }
@@ -1265,25 +1265,6 @@ class PeerConnectionObserver implements PeerConnection.Observer, EventChannel.St
     ConstraintsMap params = new ConstraintsMap();
     params.putArray("transceivers", transceiversParams.toArrayList());
     result.success(params.toMap());
-  }
-
-  protected MediaStreamTrack getTransceiversTrack(String trackId) {
-    if (this.configuration.sdpSemantics != PeerConnection.SdpSemantics.UNIFIED_PLAN) {
-      return null;
-    }
-    MediaStreamTrack track = null;
-    List<RtpTransceiver> transceivers = peerConnection.getTransceivers();
-    for (RtpTransceiver transceiver : transceivers) {
-      RtpReceiver receiver = transceiver.getReceiver();
-      if (receiver != null) {
-        MediaStreamTrack receiverTrack = receiver.track();
-        if (receiverTrack != null && receiverTrack.id().equals(trackId)) {
-          track = receiverTrack;
-          break;
-        }
-      }
-    }
-    return track;
   }
 
   MediaStreamTrack getRemoteTrack(String trackId) {

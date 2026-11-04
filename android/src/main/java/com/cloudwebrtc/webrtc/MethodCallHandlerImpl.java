@@ -1789,9 +1789,6 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
     for (Entry<String, PeerConnectionObserver> entry : mPeerConnectionObservers.entrySet()) {
       PeerConnectionObserver pco = entry.getValue();
       MediaStreamTrack track = pco.getRemoteTrack(trackId);
-      if (track == null) {
-        track = pco.getTransceiversTrack(trackId);
-      }
       if (track != null) {
         return track;
       }
@@ -1890,10 +1887,6 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
 
         PeerConnectionObserver pco = entry.getValue();
         mediaStreamTrack = pco.getRemoteTrack(trackId);
-
-        if (mediaStreamTrack == null) {
-          mediaStreamTrack = pco.getTransceiversTrack(trackId);
-        }
 
         if (mediaStreamTrack != null) {
           break;
@@ -2038,7 +2031,7 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
   }
 
   public void mediaStreamTrackSetVolume(final String id, final double volume, String peerConnectionId) {
-    MediaStreamTrack track = getTrackForId(id, null);
+    MediaStreamTrack track = getTrackForId(id, peerConnectionId);
     if (track instanceof AudioTrack) {
       Log.d(TAG, "setVolume(): " + id + "," + volume);
       try {
