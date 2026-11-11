@@ -1,5 +1,13 @@
 // swift-tools-version: 5.9
 import PackageDescription
+import Foundation
+
+// The app links the device-only vendor frameworks through FisheyeMediaSDK.podspec.
+let mediaSdkHeaders = URL(fileURLWithPath: #filePath)
+    .resolvingSymlinksInPath()
+    .deletingLastPathComponent()
+    .appendingPathComponent("../../fisheye/ios/vendor/include")
+    .standardizedFileURL.path
 
 let package = Package(
     name: "flutter_webrtc",
@@ -28,7 +36,8 @@ let package = Package(
                 .product(name: "FlutterFramework", package: "FlutterFramework")
             ],
             cSettings: [
-                .headerSearchPath("include/flutter_webrtc")
+                .headerSearchPath("include/flutter_webrtc"),
+                .unsafeFlags(["-I", mediaSdkHeaders])
             ],
             linkerSettings: [
                 .linkedLibrary("c++")

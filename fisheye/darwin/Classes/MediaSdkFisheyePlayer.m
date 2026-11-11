@@ -1,4 +1,36 @@
 #import "MediaSdkFisheyePlayer.h"
+#import <TargetConditionals.h>
+
+#if TARGET_OS_SIMULATOR
+
+// The vendor only ships device binaries. Keep the plugin usable on Simulator
+// without linking those binaries, for both CocoaPods and SwiftPM builds.
+@implementation MediaSdkFisheyePlayer
+
+- (BOOL)startWithRtspUrl:(NSString *)rtspUrl ptzMode:(NSUInteger)ptzMode fixMode:(NSUInteger)fixMode {
+  NSLog(@"[MediaSdkFisheyePlayer] The vendor fisheye SDK is not supported on iOS Simulator.");
+  return NO;
+}
+
+- (BOOL)setPtzMode:(NSUInteger)ptzMode fixMode:(NSUInteger)fixMode {
+  return NO;
+}
+
+- (void)stop {}
+
+- (int64_t)createTextureWithRegistry:(id<FlutterTextureRegistry>)registry {
+  return -1;
+}
+
+- (void)disposeTexture {}
+
+- (CVPixelBufferRef)copyPixelBuffer {
+  return NULL;
+}
+
+@end
+
+#else
 
 // Quote-style + an explicit header search path (see
 // ../../ios/flutter_webrtc.podspec's USER_HEADER_SEARCH_PATHS) rather than
@@ -459,3 +491,5 @@ static void LogFrameShapeDiagnostic(int width, int height, unsigned long long fr
 }
 
 @end
+
+#endif
